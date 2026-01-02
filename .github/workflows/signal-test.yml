@@ -26,20 +26,45 @@ jobs:
       - name: Run Signal Test Script
         id: signal-test
         uses: ./
-        timeout-minutes: 2
+        timeout-minutes: 1
+        continue-on-error: true
         with:
-          # Run the test script for 60 seconds, but we'll cancel it after a few seconds
-          command: node __fixtures__/signal-test.js 60
+          # Run the test script for 120 seconds, but timeout after 1 minute to test signal forwarding
+          command: node __fixtures__/signal-test.js 120
 
       - name: Verify Test Output
         if: always()
         run: |
           echo "Exit Code: ${{ steps.signal-test.outputs.exit_code }}"
+          echo "=== Standard Output ==="
+          echo "${{ steps.signal-test.outputs.stdout }}"
+          echo "=== Standard Error ==="
+          echo "${{ steps.signal-test.outputs.stderr }}"
+          echo ""
+          echo "Checking if outputs were populated..."
+          if [ -n "${{ steps.signal-test.outputs.exit_code }}" ]; then
+            echo "✓ Exit code output is populated: ${{ steps.signal-test.outputs.exit_code }}"
+          else
+            echo "✗ Exit code output is empty"
+            exit 1
+          fi
+
+          if [ -n "${{ steps.signal-test.outputs.stdout }}" ]; then
+            echo "✓ Stdout output is populated"
+          else
+            echo "✗ Stdout output is empty"
+            exit 1
+          fi
+
+          echo ""
           echo "Checking if signal was received..."
           if echo "${{ steps.signal-test.outputs.stdout }}" | grep -q "Received"; then
             echo "✓ Signal was properly forwarded to child process"
+            echo "✓ Test PASSED: Timeout triggered signal forwarding"
           else
             echo "✗ Signal forwarding may not have worked"
+            echo "✗ Test FAILED: No signal message found in output"
+            exit 1
           fi
 
   test-signal-graceful-shutdown:
