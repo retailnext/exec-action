@@ -29,7 +29,7 @@ jobs:
         timeout-minutes: 2
         with:
           # Run the test script for 60 seconds, but we'll cancel it after a few seconds
-          command: npx tsx __fixtures__/signal-test.ts 60
+          command: node __fixtures__/signal-test.js 60
 
       - name: Verify Test Output
         if: always()
@@ -58,9 +58,9 @@ jobs:
         continue-on-error: true
         with:
           command:
-            sh -c "npx tsx __fixtures__/signal-test.ts 120 & PID=$!; sleep 5;
-            echo 'Sending SIGTERM to test graceful shutdown...'; kill -TERM
-            $PID; wait $PID"
+            sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 5; echo
+            'Sending SIGTERM to test graceful shutdown...'; kill -TERM $PID;
+            wait $PID"
 
       - name: Check Graceful Shutdown
         run: |
@@ -89,8 +89,8 @@ jobs:
         continue-on-error: true
         with:
           command:
-            sh -c "npx tsx __fixtures__/signal-test.ts 120 & PID=$!; sleep 3;
-            echo 'Sending SIGHUP...'; kill -HUP $PID; wait $PID"
+            sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 3; echo
+            'Sending SIGHUP...'; kill -HUP $PID; wait $PID"
 
       - name: Verify SIGHUP Handling
         run: |
@@ -108,8 +108,8 @@ jobs:
         continue-on-error: true
         with:
           command:
-            sh -c "npx tsx __fixtures__/signal-test.ts 120 & PID=$!; sleep 3;
-            echo 'Sending SIGINT...'; kill -INT $PID; wait $PID"
+            sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 3; echo
+            'Sending SIGINT...'; kill -INT $PID; wait $PID"
 
       - name: Verify SIGINT Handling
         run: |

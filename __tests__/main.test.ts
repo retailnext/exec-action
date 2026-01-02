@@ -94,26 +94,20 @@ describe('main.ts', () => {
       expect(core.setFailed).not.toHaveBeenCalled()
     })
 
-    it.skip('Handles execution errors', async () => {
-      // TODO: This test is skipped due to timing issues in the test environment
-      // The actual functionality works correctly as verified by manual testing
-      // Use a command that will cause an error
+    it('Handles execution errors', async () => {
+      // Use parseCommand with invalid input to trigger an error
       core.getInput.mockImplementation((name: string) => {
-        if (name === 'command')
-          return 'this-command-does-not-exist-and-will-fail'
+        if (name === 'command') return 'echo "test\\'
         if (name === 'success_exit_codes') return '0'
         return ''
       })
 
       await run()
 
-      // Give some time for async operations to complete
-      await new Promise((resolve) => setTimeout(resolve, 100))
-
-      // Verify that the action was marked as failed
+      // Verify that the action was marked as failed due to parse error
       expect(core.setFailed).toHaveBeenCalled()
       expect(core.setFailed).toHaveBeenCalledWith(
-        expect.stringContaining('ENOENT')
+        expect.stringContaining('incomplete escape sequence')
       )
     })
   })
