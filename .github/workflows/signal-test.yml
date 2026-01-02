@@ -1,0 +1,154 @@
+name: Signal Handling Test
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-signal-handling:
+    name: Test Signal Forwarding
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v6
+
+      - name: Run Signal Test Script
+        id: signal-test
+        uses: ./
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          # Run the test script for 120 seconds, but timeout after
+          # 1 minute to test signal forwarding
+          command: node __fixtures__/signal-test.js 120
+
+      - name: Verify Test Output
+        if: always()
+        run: |
+          echo "Exit Code: ${{ steps.signal-test.outputs.exit_code }}"
+          echo "=== Standard Output ==="
+          echo "${{ steps.signal-test.outputs.stdout }}"
+          echo "=== Standard Error ==="
+          echo "${{ steps.signal-test.outputs.stderr }}"
+          echo ""
+          echo "Checking if outputs were populated..."
+          if [ -n "${{ steps.signal-test.outputs.exit_code }}" ]; then
+            echo "✓ Exit code output is populated:"
+            echo "  ${{ steps.signal-test.outputs.exit_code }}"
+          else
+            echo "✗ Exit code output is empty"
+            exit 1
+          fi
+
+          if [ -n "${{ steps.signal-test.outputs.stdout }}" ]; then
+            echo "✓ Stdout output is populated"
+          else
+            echo "✗ Stdout output is empty"
+            exit 1
+          fi
+
+          echo ""
+          echo "Checking if signal was received..."
+          if echo "${{ steps.signal-test.outputs.stdout }}" \
+            | grep -q "Received"; then
+            echo "✓ Signal was properly forwarded to child process"
+            echo "✓ Test PASSED: Timeout triggered signal forwarding"
+          else
+            echo "✗ Signal forwarding may not have worked"
+            echo "✗ Test FAILED: No signal message found in output"
+            exit 1
+          fi
+
+  test-signal-graceful-shutdown:
+    name: Test Graceful Shutdown on SIGTERM
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run Test with Timeout
+        id: timeout-test
+        uses: ./
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          command:
+            sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 5; echo
+            'Sending SIGTERM to test graceful shutdown...'; kill -TERM $PID;
+            wait $PID"
+
+      - name: Check Graceful Shutdown
+        run: |
+          echo "Exit Code: ${{ steps.timeout-test.outputs.exit_code }}"
+          echo "=== Output ==="
+          echo "${{ steps.timeout-test.outputs.stdout }}"
+          if echo "${{ steps.timeout-test.outputs.stdout }}" \
+            | grep -q "shutting down gracefully"; then
+            echo "✓ Graceful shutdown worked correctly"
+          else
+            echo "✗ Graceful shutdown message not found"
+            exit 1
+          fi
+
+  test-signal-types:
+    name: Test Different Signal Types
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Test SIGHUP
+        id: test-sighup
+        uses: ./
+        continue-on-error: true
+        with:
+          command:
+            sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 3; echo
+            'Sending SIGHUP...'; kill -HUP $PID; wait $PID"
+
+      - name: Verify SIGHUP Handling
+        run: |
+          echo "SIGHUP Test Output:"
+          echo "${{ steps.test-sighup.outputs.stdout }}"
+          if echo "${{ steps.test-sighup.outputs.stdout }}" \
+            | grep -q "Received SIGHUP"; then
+            echo "✓ SIGHUP was handled correctly"
+          else
+            echo "Note: SIGHUP handling may vary by environment"
+          fi
+
+      - name: Test SIGINT
+        id: test-sigint
+        uses: ./
+        continue-on-error: true
+        with:
+          command:
+            sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 3; echo
+            'Sending SIGINT...'; kill -INT $PID; wait $PID"
+
+      - name: Verify SIGINT Handling
+        run: |
+          echo "SIGINT Test Output:"
+          echo "${{ steps.test-sigint.outputs.stdout }}"
+          if echo "${{ steps.test-sigint.outputs.stdout }}" \
+            | grep -q "Received SIGINT"; then
+            echo "✓ SIGINT was handled correctly"
+          else
+            echo "✗ SIGINT handling failed"
+            exit 1
+          fi

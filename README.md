@@ -1,4 +1,4 @@
-# Create a GitHub Action Using TypeScript
+# Execute Command Action
 
 ![Linter](https://github.com/actions/typescript-action/actions/workflows/linter.yml/badge.svg)
 ![CI](https://github.com/actions/typescript-action/actions/workflows/ci.yml/badge.svg)
@@ -6,30 +6,165 @@
 ![CodeQL](https://github.com/actions/typescript-action/actions/workflows/codeql-analysis.yml/badge.svg)
 ![Coverage](./badges/coverage.svg)
 
-Use this template to bootstrap the creation of a TypeScript action. :rocket:
+A GitHub Action that executes an arbitrary command and captures its output,
+including stdout, stderr, and exit code. The action streams command output in
+real-time and properly handles signals like SIGINT and SIGHUP.
 
-This template includes compilation support, tests, a validation workflow,
-publishing, and versioning guidance.
+## Features
 
-If you are new, there's also a simpler introduction in the
-[Hello world JavaScript action repository](https://github.com/actions/hello-world-javascript-action).
+- Execute any shell command
+- Capture standard output, standard error, and exit code as action outputs
+- Stream output in real-time to the workflow logs
+- Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the
+  running command
+- Native Node.js implementation using `child_process`
+- Commands are executed directly without a shell (no shell operators like `|`,
+  `&&`, `>`)
 
-## Create Your Own Action
-
-To create your own action, you can use this repository as a template! Just
-follow the below instructions:
-
-1. Click the **Use this template** button at the top of the repository
-1. Select **Create a new repository**
-1. Select an owner and name for your new repository
-1. Click **Create repository**
-1. Clone your new repository
-
-> [!IMPORTANT]
+> [!IMPORTANT] This action executes commands **directly without a shell**. This
+> means shell features like pipes (`|`), redirects (`>`), command chaining
+> (`&&`, `||`), and glob expansion (`*`) are **not available**. If you need
+> shell features, wrap your command with `sh -c` or `bash -c`:
 >
-> Make sure to remove or update the [`CODEOWNERS`](./CODEOWNERS) file! For
-> details on how to use this file, see
-> [About code owners](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners).
+> ```yaml
+> command: sh -c "echo hello | grep h"
+> ```
+
+## Usage
+
+```yaml
+steps:
+  - name: Checkout
+    uses: actions/checkout@v4
+
+  - name: Execute Command
+    id: exec
+    uses: ./
+    with:
+      command: 'echo "Hello World"'
+
+  - name: Print Output
+    run: |
+      echo "Exit Code: ${{ steps.exec.outputs.exit_code }}"
+      echo "Stdout: ${{ steps.exec.outputs.stdout }}"
+      echo "Stderr: ${{ steps.exec.outputs.stderr }}"
+```
+
+## Inputs
+
+### `command`
+
+**Required** The command to execute with its arguments.
+
+The command is executed directly without a shell. Executables in your PATH can
+be used without specifying the full path (e.g., `npm`, `ls`, `git`).
+
+For shell features like pipes or redirects, use `sh -c` or `bash -c`:
+
+- `sh -c "command1 | command2"`
+- `bash -c "echo hello > file.txt"`
+
+### `success_exit_codes`
+
+**Optional** Exit codes that should be treated as success. Can be individual
+codes (e.g., `"0,1,2"`) or ranges (e.g., `"0-2,5,10-15"`). Default is `"0"`.
+
+This is useful when your command may exit with non-zero codes that should still
+be considered successful. For example, some linters return specific exit codes
+for warnings vs errors, or you may want to accept multiple exit codes as valid
+outcomes.
+
+## Outputs
+
+### `stdout`
+
+The standard output of the executed command.
+
+### `stderr`
+
+The standard error of the executed command.
+
+### `exit_code`
+
+The exit code of the executed command (as a string).
+
+## Examples
+
+### Run a build command
+
+```yaml
+- name: Build Project
+  id: build
+  uses: ./
+  with:
+    command: 'npm run build'
+
+- name: Check Build Status
+  if: steps.build.outputs.exit_code == '0'
+  run: echo "Build succeeded!"
+```
+
+### Execute multiple commands
+
+```yaml
+- name: Run Multiple Commands
+  uses: ./
+  with:
+    command: |
+      echo "Starting tests..."
+      npm test
+      echo "Tests complete!"
+```
+
+### Handle errors
+
+```yaml
+- name: Run Command
+  id: run
+  uses: ./
+  with:
+    command: 'some-command-that-might-fail'
+  continue-on-error: true
+
+- name: Handle Failure
+  if: steps.run.outputs.exit_code != '0'
+  run: |
+    echo "Command failed with exit code ${{ steps.run.outputs.exit_code }}"
+    echo "Error output: ${{ steps.run.outputs.stderr }}"
+```
+
+### Accept multiple exit codes as success
+
+```yaml
+- name: Run Linter
+  uses: ./
+  with:
+    command: 'eslint .'
+    # Treat exit codes 0 (no issues) and 1 (warnings only) as success
+    success_exit_codes: '0,1'
+```
+
+### Accept a range of exit codes
+
+```yaml
+- name: Run Tests
+  uses: ./
+  with:
+    command: 'pytest'
+    # Treat exit codes 0-5 as success
+    success_exit_codes: '0-5'
+```
+
+### Mix individual codes and ranges
+
+```yaml
+- name: Complex Command
+  uses: ./
+  with:
+    command: 'some-tool --check'
+    # Accept 0, any code from 10-15, and 20 as success
+    success_exit_codes: '0,10-15,20'
+```
 
 ## Initial Setup
 
@@ -204,7 +339,7 @@ steps:
 For example workflow runs, check out the
 [Actions tab](https://github.com/actions/typescript-action/actions)! :rocket:
 
-## Usage
+## Publishing a New Release
 
 After testing, you can create version tag(s) that developers can use to
 reference different stable versions of your action. For more information, see
@@ -232,7 +367,7 @@ steps:
     run: echo "${{ steps.test-action.outputs.time }}"
 ```
 
-## Publishing a New Release
+## Release Script
 
 This project includes a helper script, [`script/release`](./script/release)
 designed to streamline the process of tagging and pushing new releases for

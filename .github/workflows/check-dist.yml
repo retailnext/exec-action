@@ -59,8 +59,11 @@ jobs:
             ls -la ./
             exit 1
           fi
-          if [ "$(git diff --ignore-space-at-eol --text dist/ | wc -l)" -gt "0" ]; then
-            echo "Detected uncommitted changes after build. See status below:"
+          DIFF_LINES=$(git diff --ignore-space-at-eol --text dist/ \
+            | wc -l)
+          if [ "$DIFF_LINES" -gt "0" ]; then
+            echo "Detected uncommitted changes after build."
+            echo "See status below:"
             git diff --ignore-space-at-eol --text dist/
             exit 1
           fi
