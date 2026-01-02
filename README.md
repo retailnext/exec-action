@@ -15,7 +15,8 @@ real-time and properly handles signals like SIGINT and SIGHUP.
 - Execute any shell command
 - Capture standard output, standard error, and exit code as action outputs
 - Stream output in real-time to the workflow logs
-- Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the running command
+- Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the
+  running command
 - Native Node.js implementation using `child_process`
 
 ## Usage
