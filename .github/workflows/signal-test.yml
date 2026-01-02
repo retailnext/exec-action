@@ -29,7 +29,8 @@ jobs:
         timeout-minutes: 1
         continue-on-error: true
         with:
-          # Run the test script for 120 seconds, but timeout after 1 minute to test signal forwarding
+          # Run the test script for 120 seconds, but timeout after
+          # 1 minute to test signal forwarding
           command: node __fixtures__/signal-test.js 120
 
       - name: Verify Test Output
@@ -43,7 +44,8 @@ jobs:
           echo ""
           echo "Checking if outputs were populated..."
           if [ -n "${{ steps.signal-test.outputs.exit_code }}" ]; then
-            echo "✓ Exit code output is populated: ${{ steps.signal-test.outputs.exit_code }}"
+            echo "✓ Exit code output is populated:"
+            echo "  ${{ steps.signal-test.outputs.exit_code }}"
           else
             echo "✗ Exit code output is empty"
             exit 1
@@ -58,7 +60,8 @@ jobs:
 
           echo ""
           echo "Checking if signal was received..."
-          if echo "${{ steps.signal-test.outputs.stdout }}" | grep -q "Received"; then
+          if echo "${{ steps.signal-test.outputs.stdout }}" \
+            | grep -q "Received"; then
             echo "✓ Signal was properly forwarded to child process"
             echo "✓ Test PASSED: Timeout triggered signal forwarding"
           else
@@ -92,7 +95,8 @@ jobs:
           echo "Exit Code: ${{ steps.timeout-test.outputs.exit_code }}"
           echo "=== Output ==="
           echo "${{ steps.timeout-test.outputs.stdout }}"
-          if echo "${{ steps.timeout-test.outputs.stdout }}" | grep -q "shutting down gracefully"; then
+          if echo "${{ steps.timeout-test.outputs.stdout }}" \
+            | grep -q "shutting down gracefully"; then
             echo "✓ Graceful shutdown worked correctly"
           else
             echo "✗ Graceful shutdown message not found"
@@ -121,7 +125,8 @@ jobs:
         run: |
           echo "SIGHUP Test Output:"
           echo "${{ steps.test-sighup.outputs.stdout }}"
-          if echo "${{ steps.test-sighup.outputs.stdout }}" | grep -q "Received SIGHUP"; then
+          if echo "${{ steps.test-sighup.outputs.stdout }}" \
+            | grep -q "Received SIGHUP"; then
             echo "✓ SIGHUP was handled correctly"
           else
             echo "Note: SIGHUP handling may vary by environment"
@@ -140,7 +145,8 @@ jobs:
         run: |
           echo "SIGINT Test Output:"
           echo "${{ steps.test-sigint.outputs.stdout }}"
-          if echo "${{ steps.test-sigint.outputs.stdout }}" | grep -q "Received SIGINT"; then
+          if echo "${{ steps.test-sigint.outputs.stdout }}" \
+            | grep -q "Received SIGINT"; then
             echo "✓ SIGINT was handled correctly"
           else
             echo "✗ SIGINT handling failed"
