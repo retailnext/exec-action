@@ -18,6 +18,17 @@ real-time and properly handles signals like SIGINT and SIGHUP.
 - Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the
   running command
 - Native Node.js implementation using `child_process`
+- Commands are executed directly without a shell (no shell operators like `|`,
+  `&&`, `>`)
+
+> [!IMPORTANT] This action executes commands **directly without a shell**. This
+> means shell features like pipes (`|`), redirects (`>`), command chaining
+> (`&&`, `||`), and glob expansion (`*`) are **not available**. If you need
+> shell features, wrap your command with `sh -c` or `bash -c`:
+>
+> ```yaml
+> command: sh -c "echo hello | grep h"
+> ```
 
 ## Usage
 
@@ -30,7 +41,7 @@ steps:
     id: exec
     uses: ./
     with:
-      command: 'echo "Hello World" && ls -la'
+      command: 'echo "Hello World"'
 
   - name: Print Output
     run: |
@@ -43,7 +54,15 @@ steps:
 
 ### `command`
 
-**Required** The command to execute. This can be any shell command.
+**Required** The command to execute with its arguments.
+
+The command is executed directly without a shell. Executables in your PATH can
+be used without specifying the full path (e.g., `npm`, `ls`, `git`).
+
+For shell features like pipes or redirects, use `sh -c` or `bash -c`:
+
+- `sh -c "command1 | command2"`
+- `bash -c "echo hello > file.txt"`
 
 ### `success_exit_codes`
 

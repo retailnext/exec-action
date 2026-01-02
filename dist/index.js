@@ -27331,13 +27331,22 @@ function parseSuccessExitCodes(input) {
  */
 async function executeCommand(command) {
     return new Promise((resolve, reject) => {
-        // Use shell to execute the command
-        const child = spawn(command, {
-            shell: true,
+        // Parse command into executable and arguments
+        // Simple parsing that splits on whitespace while respecting quoted strings
+        const args = parseCommand(command);
+        if (args.length === 0) {
+            reject(new Error('Command cannot be empty'));
+            return;
+        }
+        const executable = args[0];
+        const commandArgs = args.slice(1);
+        // Execute command directly without shell
+        const child = spawn(executable, commandArgs, {
             stdio: ['inherit', 'pipe', 'pipe']
         });
         let stdout = '';
         let stderr = '';
+        let settled = false;
         // Capture and stream stdout
         if (child.stdout) {
             child.stdout.on('data', (data) => {
@@ -27380,21 +27389,76 @@ async function executeCommand(command) {
             }
             signalHandlers.clear();
         };
+        // Handle errors (e.g., command not found)
+        child.on('error', (error) => {
+            if (!settled) {
+                settled = true;
+                cleanupSignalHandlers();
+                reject(error);
+            }
+        });
         // Handle process exit
         child.on('close', (code) => {
-            cleanupSignalHandlers();
-            resolve({
-                stdout,
-                stderr,
-                exitCode: code ?? 0
-            });
-        });
-        // Handle errors
-        child.on('error', (error) => {
-            cleanupSignalHandlers();
-            reject(error);
+            if (!settled) {
+                settled = true;
+                cleanupSignalHandlers();
+                resolve({
+                    stdout,
+                    stderr,
+                    exitCode: code ?? 0
+                });
+            }
         });
     });
+}
+/**
+ * Parse a command string into an array of arguments.
+ * Handles quoted strings and escapes.
+ *
+ * @param command The command string to parse.
+ * @returns An array of arguments.
+ */
+function parseCommand(command) {
+    const args = [];
+    let current = '';
+    let inQuotes = null;
+    let escaped = false;
+    for (let i = 0; i < command.length; i++) {
+        const char = command[i];
+        if (escaped) {
+            current += char;
+            escaped = false;
+            continue;
+        }
+        if (char === '\\') {
+            escaped = true;
+            continue;
+        }
+        if (inQuotes) {
+            if (char === inQuotes) {
+                inQuotes = null;
+            }
+            else {
+                current += char;
+            }
+        }
+        else if (char === '"' || char === "'") {
+            inQuotes = char;
+        }
+        else if (char === ' ' || char === '\t' || char === '\n') {
+            if (current.length > 0) {
+                args.push(current);
+                current = '';
+            }
+        }
+        else {
+            current += char;
+        }
+    }
+    if (current.length > 0) {
+        args.push(current);
+    }
+    return args;
 }
 
 /**
