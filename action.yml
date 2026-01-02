@@ -1,23 +1,26 @@
-name: The name of your action here
-description: Provide a description here
+name: Execute Command
+description: Execute an arbitrary command and capture its output
 author: Your name or organization here
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
-  icon: heart
-  color: red
+  icon: terminal
+  color: blue
 
 # Define your inputs here.
 inputs:
-  milliseconds:
-    description: Your input description here
+  command:
+    description: The command to execute
     required: true
-    default: '1000'
 
 # Define your outputs here.
 outputs:
-  time:
-    description: Your output description here
+  stdout:
+    description: The standard output of the command
+  stderr:
+    description: The standard error of the command
+  exit_code:
+    description: The exit code of the command
 
 runs:
   using: node24

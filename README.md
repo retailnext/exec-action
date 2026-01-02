@@ -1,4 +1,4 @@
-# Create a GitHub Action Using TypeScript
+# Execute Command Action
 
 ![Linter](https://github.com/actions/typescript-action/actions/workflows/linter.yml/badge.svg)
 ![CI](https://github.com/actions/typescript-action/actions/workflows/ci.yml/badge.svg)
@@ -6,30 +6,102 @@
 ![CodeQL](https://github.com/actions/typescript-action/actions/workflows/codeql-analysis.yml/badge.svg)
 ![Coverage](./badges/coverage.svg)
 
-Use this template to bootstrap the creation of a TypeScript action. :rocket:
+A GitHub Action that executes an arbitrary command and captures its output,
+including stdout, stderr, and exit code. The action streams command output in
+real-time and properly handles signals like SIGINT and SIGHUP.
 
-This template includes compilation support, tests, a validation workflow,
-publishing, and versioning guidance.
+## Features
 
-If you are new, there's also a simpler introduction in the
-[Hello world JavaScript action repository](https://github.com/actions/hello-world-javascript-action).
+- Execute any shell command
+- Capture standard output, standard error, and exit code as action outputs
+- Stream output in real-time to the workflow logs
+- Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the running command
+- Native Node.js implementation using `child_process`
 
-## Create Your Own Action
+## Usage
 
-To create your own action, you can use this repository as a template! Just
-follow the below instructions:
+```yaml
+steps:
+  - name: Checkout
+    uses: actions/checkout@v4
 
-1. Click the **Use this template** button at the top of the repository
-1. Select **Create a new repository**
-1. Select an owner and name for your new repository
-1. Click **Create repository**
-1. Clone your new repository
+  - name: Execute Command
+    id: exec
+    uses: ./
+    with:
+      command: 'echo "Hello World" && ls -la'
 
-> [!IMPORTANT]
->
-> Make sure to remove or update the [`CODEOWNERS`](./CODEOWNERS) file! For
-> details on how to use this file, see
-> [About code owners](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners).
+  - name: Print Output
+    run: |
+      echo "Exit Code: ${{ steps.exec.outputs.exit_code }}"
+      echo "Stdout: ${{ steps.exec.outputs.stdout }}"
+      echo "Stderr: ${{ steps.exec.outputs.stderr }}"
+```
+
+## Inputs
+
+### `command`
+
+**Required** The command to execute. This can be any shell command.
+
+## Outputs
+
+### `stdout`
+
+The standard output of the executed command.
+
+### `stderr`
+
+The standard error of the executed command.
+
+### `exit_code`
+
+The exit code of the executed command (as a string).
+
+## Examples
+
+### Run a build command
+
+```yaml
+- name: Build Project
+  id: build
+  uses: ./
+  with:
+    command: 'npm run build'
+
+- name: Check Build Status
+  if: steps.build.outputs.exit_code == '0'
+  run: echo "Build succeeded!"
+```
+
+### Execute multiple commands
+
+```yaml
+- name: Run Multiple Commands
+  uses: ./
+  with:
+    command: |
+      echo "Starting tests..."
+      npm test
+      echo "Tests complete!"
+```
+
+### Handle errors
+
+```yaml
+- name: Run Command
+  id: run
+  uses: ./
+  with:
+    command: 'some-command-that-might-fail'
+  continue-on-error: true
+
+- name: Handle Failure
+  if: steps.run.outputs.exit_code != '0'
+  run: |
+    echo "Command failed with exit code ${{ steps.run.outputs.exit_code }}"
+    echo "Error output: ${{ steps.run.outputs.stderr }}"
+```
 
 ## Initial Setup
 

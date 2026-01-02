@@ -57,8 +57,11 @@ jobs:
         id: test-action
         uses: ./
         with:
-          milliseconds: 2000
+          command: echo "Hello from the test workflow!"
 
       - name: Print Output
         id: output
-        run: echo "${{ steps.test-action.outputs.time }}"
+        run: |
+          echo "Exit Code: ${{ steps.test-action.outputs.exit_code }}"
+          echo "Stdout: ${{ steps.test-action.outputs.stdout }}"
+          echo "Stderr: ${{ steps.test-action.outputs.stderr }}"

@@ -25,7 +25,7 @@ import require$$1$4 from 'url';
 import require$$3$1 from 'zlib';
 import require$$6 from 'string_decoder';
 import require$$0$9 from 'diagnostics_channel';
-import require$$2$2 from 'child_process';
+import require$$2$2, { spawn } from 'child_process';
 import require$$6$1 from 'timers';
 
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
@@ -27247,41 +27247,98 @@ function requireCore () {
 var coreExports = requireCore();
 
 /**
- * Waits for a number of milliseconds.
- *
- * @param milliseconds The number of milliseconds to wait.
- * @returns Resolves with 'done!' after the wait is over.
- */
-async function wait(milliseconds) {
-    return new Promise((resolve) => {
-        if (isNaN(milliseconds))
-            throw new Error('milliseconds is not a number');
-        setTimeout(() => resolve('done!'), milliseconds);
-    });
-}
-
-/**
  * The main function for the action.
  *
  * @returns Resolves when the action is complete.
  */
 async function run() {
     try {
-        const ms = coreExports.getInput('milliseconds');
-        // Debug logs are only output if the `ACTIONS_STEP_DEBUG` secret is true
-        coreExports.debug(`Waiting ${ms} milliseconds ...`);
-        // Log the current timestamp, wait, then log the new timestamp
-        coreExports.debug(new Date().toTimeString());
-        await wait(parseInt(ms, 10));
-        coreExports.debug(new Date().toTimeString());
+        const command = coreExports.getInput('command', { required: true });
+        coreExports.debug(`Executing command: ${command}`);
+        // Execute the command and capture outputs
+        const result = await executeCommand(command);
         // Set outputs for other workflow steps to use
-        coreExports.setOutput('time', new Date().toTimeString());
+        coreExports.setOutput('stdout', result.stdout);
+        coreExports.setOutput('stderr', result.stderr);
+        coreExports.setOutput('exit_code', result.exitCode.toString());
+        // If the command failed, mark the action as failed
+        if (result.exitCode !== 0) {
+            coreExports.setFailed(`Command exited with code ${result.exitCode}: ${result.stderr || result.stdout}`);
+        }
     }
     catch (error) {
         // Fail the workflow run if an error occurs
         if (error instanceof Error)
             coreExports.setFailed(error.message);
     }
+}
+/**
+ * Execute a command and capture its output.
+ *
+ * @param command The command to execute.
+ * @returns A promise that resolves with stdout, stderr, and exit code.
+ */
+async function executeCommand(command) {
+    return new Promise((resolve, reject) => {
+        // Use shell to execute the command
+        const child = spawn(command, {
+            shell: true,
+            stdio: ['inherit', 'pipe', 'pipe']
+        });
+        let stdout = '';
+        let stderr = '';
+        // Capture and stream stdout
+        if (child.stdout) {
+            child.stdout.on('data', (data) => {
+                const text = data.toString();
+                stdout += text;
+                process.stdout.write(text);
+            });
+        }
+        // Capture and stream stderr
+        if (child.stderr) {
+            child.stderr.on('data', (data) => {
+                const text = data.toString();
+                stderr += text;
+                process.stderr.write(text);
+            });
+        }
+        // Handle process exit
+        child.on('close', (code) => {
+            resolve({
+                stdout,
+                stderr,
+                exitCode: code ?? 0
+            });
+        });
+        // Handle errors
+        child.on('error', (error) => {
+            reject(error);
+        });
+        // Forward signals to the child process
+        const signals = [
+            'SIGINT',
+            'SIGTERM',
+            'SIGQUIT',
+            'SIGHUP',
+            'SIGPIPE',
+            'SIGABRT'
+        ];
+        const signalHandler = (signal) => {
+            coreExports.debug(`Received ${signal}, forwarding to child process`);
+            child.kill(signal);
+        };
+        // Register signal handlers
+        for (const signal of signals) {
+            process.on(signal, signalHandler);
+        }
+        // Clean up signal handlers when child exits
+        child.on('exit', () => {
+            for (const signal of signals) {
+                process.removeListener(signal, signalHandler);
+            }
+        });
+    });
 }
 
 /**
