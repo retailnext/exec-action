@@ -71,20 +71,6 @@ export async function executeCommand(command: string): Promise<{
       })
     }
 
-    // Handle process exit
-    child.on('close', (code: number | null) => {
-      resolve({
-        stdout,
-        stderr,
-        exitCode: code ?? 0
-      })
-    })
-
-    // Handle errors
-    child.on('error', (error: Error) => {
-      reject(error)
-    })
-
     // Forward signals to the child process
     const signals: NodeJS.Signals[] = [
       'SIGINT',
@@ -95,21 +81,39 @@ export async function executeCommand(command: string): Promise<{
       'SIGABRT'
     ]
 
-    const signalHandler = (signal: NodeJS.Signals) => {
-      core.debug(`Received ${signal}, forwarding to child process`)
-      child.kill(signal)
-    }
-
-    // Register signal handlers
+    // Create individual signal handlers for proper cleanup
+    const signalHandlers = new Map<NodeJS.Signals, () => void>()
     for (const signal of signals) {
-      process.on(signal, signalHandler)
+      const handler = () => {
+        core.debug(`Received ${signal}, forwarding to child process`)
+        child.kill(signal)
+      }
+      signalHandlers.set(signal, handler)
+      process.on(signal, handler)
     }
 
-    // Clean up signal handlers when child exits
-    child.on('exit', () => {
-      for (const signal of signals) {
-        process.removeListener(signal, signalHandler)
+    // Clean up signal handlers when child closes
+    const cleanupSignalHandlers = () => {
+      for (const [signal, handler] of signalHandlers) {
+        process.removeListener(signal, handler)
       }
+      signalHandlers.clear()
+    }
+
+    // Handle process exit
+    child.on('close', (code: number | null) => {
+      cleanupSignalHandlers()
+      resolve({
+        stdout,
+        stderr,
+        exitCode: code ?? 0
+      })
+    })
+
+    // Handle errors
+    child.on('error', (error: Error) => {
+      cleanupSignalHandlers()
+      reject(error)
     })
   })
 }

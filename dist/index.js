@@ -27303,18 +27303,6 @@ async function executeCommand(command) {
                 process.stderr.write(text);
             });
         }
-        // Handle process exit
-        child.on('close', (code) => {
-            resolve({
-                stdout,
-                stderr,
-                exitCode: code ?? 0
-            });
-        });
-        // Handle errors
-        child.on('error', (error) => {
-            reject(error);
-        });
         // Forward signals to the child process
         const signals = [
             'SIGINT',
@@ -27324,19 +27312,36 @@ async function executeCommand(command) {
             'SIGPIPE',
             'SIGABRT'
         ];
-        const signalHandler = (signal) => {
-            coreExports.debug(`Received ${signal}, forwarding to child process`);
-            child.kill(signal);
-        };
-        // Register signal handlers
+        // Create individual signal handlers for proper cleanup
+        const signalHandlers = new Map();
         for (const signal of signals) {
-            process.on(signal, signalHandler);
+            const handler = () => {
+                coreExports.debug(`Received ${signal}, forwarding to child process`);
+                child.kill(signal);
+            };
+            signalHandlers.set(signal, handler);
+            process.on(signal, handler);
         }
-        // Clean up signal handlers when child exits
-        child.on('exit', () => {
-            for (const signal of signals) {
-                process.removeListener(signal, signalHandler);
+        // Clean up signal handlers when child closes
+        const cleanupSignalHandlers = () => {
+            for (const [signal, handler] of signalHandlers) {
+                process.removeListener(signal, handler);
             }
+            signalHandlers.clear();
+        };
+        // Handle process exit
+        child.on('close', (code) => {
+            cleanupSignalHandlers();
+            resolve({
+                stdout,
+                stderr,
+                exitCode: code ?? 0
+            });
+        });
+        // Handle errors
+        child.on('error', (error) => {
+            cleanupSignalHandlers();
+            reject(error);
         });
     });
 }
