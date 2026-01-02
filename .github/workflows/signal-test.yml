@@ -29,7 +29,7 @@ jobs:
         timeout-minutes: 2
         with:
           # Run the test script for 60 seconds, but we'll cancel it after a few seconds
-          command: node __tests__/fixtures/signal-test.mjs 60
+          command: npx tsx __fixtures__/signal-test.ts 60
 
       - name: Verify Test Output
         if: always()
@@ -58,7 +58,7 @@ jobs:
         continue-on-error: true
         with:
           command: |
-            node __tests__/fixtures/signal-test.mjs 120 &
+            npx tsx __fixtures__/signal-test.ts 120 &
             PID=$!
             sleep 5
             echo "Sending SIGTERM to test graceful shutdown..."
@@ -92,7 +92,7 @@ jobs:
         continue-on-error: true
         with:
           command: |
-            node __tests__/fixtures/signal-test.mjs 120 &
+            npx tsx __fixtures__/signal-test.ts 120 &
             PID=$!
             sleep 3
             echo "Sending SIGHUP..."
@@ -115,7 +115,7 @@ jobs:
         continue-on-error: true
         with:
           command: |
-            node __tests__/fixtures/signal-test.mjs 120 &
+            npx tsx __fixtures__/signal-test.ts 120 &
             PID=$!
             sleep 3
             echo "Sending SIGINT..."

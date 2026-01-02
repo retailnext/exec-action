@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 
 /**
  * Test script that prints the time every second and handles signals.
@@ -6,10 +6,10 @@
  */
 
 let running = true
-let signalReceived = null
+let signalReceived: NodeJS.Signals | null = null
 
 // Handle signals
-const signals = ['SIGTERM', 'SIGHUP', 'SIGINT', 'SIGQUIT']
+const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGHUP', 'SIGINT', 'SIGQUIT']
 
 for (const signal of signals) {
   process.on(signal, () => {
@@ -55,12 +55,12 @@ const interval = setInterval(() => {
 }, 1000)
 
 // Handle uncaught errors
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', (err: Error) => {
   console.error('[signal-test] Uncaught exception:', err)
   process.exit(1)
 })
 
-process.on('unhandledRejection', (err) => {
+process.on('unhandledRejection', (err: Error) => {
   console.error('[signal-test] Unhandled rejection:', err)
   process.exit(1)
 })
