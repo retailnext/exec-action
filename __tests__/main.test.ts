@@ -158,6 +158,20 @@ describe('main.ts', () => {
       const result = parseCommand('   ')
       expect(result).toEqual([])
     })
+
+    it('Throws error for unclosed double quote', () => {
+      expect(() => parseCommand('echo "hello')).toThrow('unclosed quote')
+    })
+
+    it('Throws error for unclosed single quote', () => {
+      expect(() => parseCommand("echo 'hello")).toThrow('unclosed quote')
+    })
+
+    it('Throws error for trailing escape character', () => {
+      expect(() => parseCommand('echo hello\\')).toThrow(
+        'incomplete escape sequence'
+      )
+    })
   })
 
   describe('parseSuccessExitCodes', () => {

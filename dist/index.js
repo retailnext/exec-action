@@ -27455,6 +27455,13 @@ function parseCommand(command) {
             current += char;
         }
     }
+    // Handle edge cases
+    if (escaped) {
+        throw new Error('Invalid command: ends with an incomplete escape sequence');
+    }
+    if (inQuotes) {
+        throw new Error(`Invalid command: unclosed quote (${inQuotes})`);
+    }
     if (current.length > 0) {
         args.push(current);
     }
