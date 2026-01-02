@@ -65,3 +65,17 @@ jobs:
           echo "Exit Code: ${{ steps.test-action.outputs.exit_code }}"
           echo "Stdout: ${{ steps.test-action.outputs.stdout }}"
           echo "Stderr: ${{ steps.test-action.outputs.stderr }}"
+
+      - name: Test Custom Success Exit Codes
+        id: test-custom-exit
+        uses: ./
+        with:
+          command: exit 5
+          success_exit_codes: '0,5,10-15'
+
+      - name: Verify Custom Exit Code Test
+        run: |
+          echo "Custom exit code test passed!"
+          echo "Exit Code: ${{ steps.test-custom-exit.outputs.exit_code }}"
+          echo "Stdout: ${{ steps.test-action.outputs.stdout }}"
+          echo "Stderr: ${{ steps.test-action.outputs.stderr }}"

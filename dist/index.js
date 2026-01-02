@@ -27254,15 +27254,19 @@ var coreExports = requireCore();
 async function run() {
     try {
         const command = coreExports.getInput('command', { required: true });
+        const successExitCodesInput = coreExports.getInput('success_exit_codes');
         coreExports.debug(`Executing command: ${command}`);
+        coreExports.debug(`Success exit codes: ${successExitCodesInput}`);
+        // Parse success exit codes
+        const successExitCodes = parseSuccessExitCodes(successExitCodesInput);
         // Execute the command and capture outputs
         const result = await executeCommand(command);
         // Set outputs for other workflow steps to use
         coreExports.setOutput('stdout', result.stdout);
         coreExports.setOutput('stderr', result.stderr);
         coreExports.setOutput('exit_code', result.exitCode.toString());
-        // If the command failed, mark the action as failed
-        if (result.exitCode !== 0) {
+        // Check if the exit code should be treated as success
+        if (!successExitCodes.has(result.exitCode)) {
             coreExports.setFailed(`Command exited with code ${result.exitCode}: ${result.stderr || result.stdout}`);
         }
     }
@@ -27271,6 +27275,47 @@ async function run() {
         if (error instanceof Error)
             coreExports.setFailed(error.message);
     }
+}
+/**
+ * Parse the success exit codes input.
+ * Supports individual codes (e.g., "0,1,2") and ranges (e.g., "0-2,5,10-15").
+ *
+ * @param input The success exit codes input string.
+ * @returns A Set of exit codes that should be treated as success.
+ */
+function parseSuccessExitCodes(input) {
+    const exitCodes = new Set();
+    if (!input || input.trim() === '') {
+        exitCodes.add(0);
+        return exitCodes;
+    }
+    const parts = input.split(',').map((part) => part.trim());
+    for (const part of parts) {
+        if (part.includes('-')) {
+            // Parse range (e.g., "0-2")
+            const [startStr, endStr] = part.split('-').map((s) => s.trim());
+            const start = parseInt(startStr, 10);
+            const end = parseInt(endStr, 10);
+            if (isNaN(start) || isNaN(end)) {
+                throw new Error(`Invalid range format: "${part}". Expected format: "start-end" (e.g., "0-2")`);
+            }
+            if (start > end) {
+                throw new Error(`Invalid range: "${part}". Start (${start}) must be less than or equal to end (${end})`);
+            }
+            for (let i = start; i <= end; i++) {
+                exitCodes.add(i);
+            }
+        }
+        else {
+            // Parse individual code
+            const code = parseInt(part, 10);
+            if (isNaN(code)) {
+                throw new Error(`Invalid exit code: "${part}". Expected a number or range (e.g., "0" or "0-2")`);
+            }
+            exitCodes.add(code);
+        }
+    }
+    return exitCodes;
 }
 /**
  * Execute a command and capture its output.

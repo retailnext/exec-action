@@ -13,7 +13,8 @@ jest.unstable_mockModule('@actions/core', () => core)
 
 // The module being tested should be imported dynamically. This ensures that the
 // mocks are used in place of any actual dependencies.
-const { run, executeCommand } = await import('../src/main.js')
+const { run, executeCommand, parseSuccessExitCodes } =
+  await import('../src/main.js')
 
 describe('main.ts', () => {
   beforeEach(() => {
@@ -22,7 +23,11 @@ describe('main.ts', () => {
 
   describe('run', () => {
     it('Executes a successful command and sets outputs', async () => {
-      core.getInput.mockReturnValue('echo "Hello World"')
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return 'echo "Hello World"'
+        if (name === 'success_exit_codes') return '0'
+        return ''
+      })
 
       await run()
 
@@ -39,7 +44,11 @@ describe('main.ts', () => {
     })
 
     it('Sets a failed status when command fails', async () => {
-      core.getInput.mockReturnValue('exit 1')
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return 'exit 1'
+        if (name === 'success_exit_codes') return '0'
+        return ''
+      })
 
       await run()
 
@@ -54,14 +63,98 @@ describe('main.ts', () => {
       )
     })
 
+    it('Treats non-zero exit code as success when specified', async () => {
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return 'exit 1'
+        if (name === 'success_exit_codes') return '0,1'
+        return ''
+      })
+
+      await run()
+
+      // Verify outputs were set
+      expect(core.setOutput).toHaveBeenCalledWith('stdout', expect.any(String))
+      expect(core.setOutput).toHaveBeenCalledWith('stderr', expect.any(String))
+      expect(core.setOutput).toHaveBeenCalledWith('exit_code', '1')
+
+      // Verify the action did not fail
+      expect(core.setFailed).not.toHaveBeenCalled()
+    })
+
+    it('Treats exit code in range as success', async () => {
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return 'exit 5'
+        if (name === 'success_exit_codes') return '0-10'
+        return ''
+      })
+
+      await run()
+
+      // Verify the action did not fail
+      expect(core.setFailed).not.toHaveBeenCalled()
+    })
+
     it('Handles execution errors', async () => {
       // Use a command that will cause an error
-      core.getInput.mockReturnValue('this-command-does-not-exist-and-will-fail')
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command')
+          return 'this-command-does-not-exist-and-will-fail'
+        if (name === 'success_exit_codes') return '0'
+        return ''
+      })
 
       await run()
 
       // Verify that the action was marked as failed
       expect(core.setFailed).toHaveBeenCalled()
+    })
+  })
+
+  describe('parseSuccessExitCodes', () => {
+    it('Parses single exit code', () => {
+      const result = parseSuccessExitCodes('0')
+      expect(result).toEqual(new Set([0]))
+    })
+
+    it('Parses multiple exit codes', () => {
+      const result = parseSuccessExitCodes('0,1,2')
+      expect(result).toEqual(new Set([0, 1, 2]))
+    })
+
+    it('Parses range of exit codes', () => {
+      const result = parseSuccessExitCodes('0-2')
+      expect(result).toEqual(new Set([0, 1, 2]))
+    })
+
+    it('Parses mixed individual codes and ranges', () => {
+      const result = parseSuccessExitCodes('0,2-4,7')
+      expect(result).toEqual(new Set([0, 2, 3, 4, 7]))
+    })
+
+    it('Handles whitespace in input', () => {
+      const result = parseSuccessExitCodes(' 0 , 1 - 3 , 5 ')
+      expect(result).toEqual(new Set([0, 1, 2, 3, 5]))
+    })
+
+    it('Returns default (0) for empty input', () => {
+      const result = parseSuccessExitCodes('')
+      expect(result).toEqual(new Set([0]))
+    })
+
+    it('Throws error for invalid format', () => {
+      expect(() => parseSuccessExitCodes('abc')).toThrow(
+        'Invalid exit code: "abc"'
+      )
+    })
+
+    it('Throws error for invalid range format', () => {
+      expect(() => parseSuccessExitCodes('0-abc')).toThrow(
+        'Invalid range format'
+      )
+    })
+
+    it('Throws error for invalid range (start > end)', () => {
+      expect(() => parseSuccessExitCodes('5-2')).toThrow('Invalid range: "5-2"')
     })
   })
 

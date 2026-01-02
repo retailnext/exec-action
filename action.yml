@@ -12,6 +12,12 @@ inputs:
   command:
     description: The command to execute
     required: true
+  success_exit_codes:
+    description: >
+      Exit codes that should be treated as success. Can be individual codes
+      (e.g., "0,1,2") or ranges (e.g., "0-2,5,10-15"). Default is "0".
+    required: false
+    default: '0'
 
 # Define your outputs here.
 outputs:
