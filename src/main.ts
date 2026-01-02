@@ -67,6 +67,12 @@ export function parseSuccessExitCodes(input: string): Set<number> {
         )
       }
 
+      if (start < 0 || end < 0) {
+        throw new Error(
+          `Invalid range: "${part}". Exit codes must be non-negative integers`
+        )
+      }
+
       if (start > end) {
         throw new Error(
           `Invalid range: "${part}". Start (${start}) must be less than or equal to end (${end})`
@@ -84,6 +90,13 @@ export function parseSuccessExitCodes(input: string): Set<number> {
           `Invalid exit code: "${part}". Expected a number or range (e.g., "0" or "0-2")`
         )
       }
+
+      if (code < 0) {
+        throw new Error(
+          `Invalid exit code: "${part}". Exit codes must be non-negative integers`
+        )
+      }
+
       exitCodes.add(code)
     }
   }

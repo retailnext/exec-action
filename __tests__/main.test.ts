@@ -156,6 +156,12 @@ describe('main.ts', () => {
     it('Throws error for invalid range (start > end)', () => {
       expect(() => parseSuccessExitCodes('5-2')).toThrow('Invalid range: "5-2"')
     })
+
+    it('Throws error for negative exit code', () => {
+      // When parsing "5--1", it becomes a range where end is negative
+      // We just verify negative codes are rejected
+      expect(() => parseSuccessExitCodes('5--1')).toThrow()
+    })
   })
 
   describe('executeCommand', () => {
