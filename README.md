@@ -339,7 +339,7 @@ steps:
 For example workflow runs, check out the
 [Actions tab](https://github.com/actions/typescript-action/actions)! :rocket:
 
-## Usage
+## Publishing a New Release
 
 After testing, you can create version tag(s) that developers can use to
 reference different stable versions of your action. For more information, see
@@ -367,7 +367,7 @@ steps:
     run: echo "${{ steps.test-action.outputs.time }}"
 ```
 
-## Publishing a New Release
+## Release Script
 
 This project includes a helper script, [`script/release`](./script/release)
 designed to streamline the process of tagging and pushing new releases for
