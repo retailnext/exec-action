@@ -73,7 +73,10 @@ following command to update the cached dependency license information:
 
 ```bash
 # Ensure that the licensed tool is installed
-command -v licensed >/dev/null || gem install licensed
+command -v licensed >/dev/null || gem install --user-install licensed
+
+# Add the local gem installation path to PATH
+PATH="$(ruby -r rubygems -e 'puts Gem.user_dir')/bin:$PATH"
 
 # Update the cached license information
 licensed cache
