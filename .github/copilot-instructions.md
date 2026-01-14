@@ -66,6 +66,24 @@ command to bundle the TypeScript code into JavaScript:
 npm run bundle
 ```
 
+## Licensed
+
+Any time package.json or package-lock.json are updated, you should run the
+following command to update the cached dependency license information:
+
+```bash
+# Ensure that the licensed tool is installed
+command -v licensed >/dev/null || gem install licensed
+
+# Update the cached license information
+licensed cache
+
+# Check that dependency licenses are approved
+licensed status
+```
+
+If there are any updates to the files in `.licenses/`, commit them.
+
 ## General Coding Guidelines
 
 - Follow standard TypeScript and JavaScript coding conventions and best
