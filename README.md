@@ -8,38 +8,32 @@
 
 A GitHub Action that executes an arbitrary command and captures its output,
 including stdout, stderr, and exit code. The action streams command output in
-real-time and properly handles signals like SIGINT and SIGHUP.
+real-time and forwards signals to the command.
 
 ## Features
 
-- Execute any shell command
+- Execute any single command
 - Capture standard output, standard error, and exit code as action outputs
 - Stream output in real-time to the workflow logs
 - Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the
   running command
-- Native Node.js implementation using `child_process`
 - Commands are executed directly without a shell (no shell operators like `|`,
   `&&`, `>`)
 
-> [!IMPORTANT] This action executes commands **directly without a shell**. This
-> means shell features like pipes (`|`), redirects (`>`), command chaining
-> (`&&`, `||`), and glob expansion (`*`) are **not available**. If you need
-> shell features, wrap your command with `sh -c` or `bash -c`:
->
-> ```yaml
-> command: sh -c "echo hello | grep h"
-> ```
+**IMPORTANT:** This action executes commands **directly without a shell**. This
+means shell features like pipes (`|`), redirects (`>`), command chaining (`&&`,
+`||`), and glob expansion (`*`) are **not available**.
 
 ## Usage
 
 ```yaml
 steps:
   - name: Checkout
-    uses: actions/checkout@v4
+    uses: actions/checkout@v6
 
   - name: Execute Command
     id: exec
-    uses: ./
+    uses: eriksw/exec-action@main
     with:
       command: 'echo "Hello World"'
 
@@ -58,11 +52,6 @@ steps:
 
 The command is executed directly without a shell. Executables in your PATH can
 be used without specifying the full path (e.g., `npm`, `ls`, `git`).
-
-For shell features like pipes or redirects, use `sh -c` or `bash -c`:
-
-- `sh -c "command1 | command2"`
-- `bash -c "echo hello > file.txt"`
 
 ### `success_exit_codes`
 
@@ -95,7 +84,7 @@ The exit code of the executed command (as a string).
 ```yaml
 - name: Build Project
   id: build
-  uses: ./
+  uses: eriksw/exec-action@main
   with:
     command: 'npm run build'
 
@@ -104,24 +93,12 @@ The exit code of the executed command (as a string).
   run: echo "Build succeeded!"
 ```
 
-### Execute multiple commands
-
-```yaml
-- name: Run Multiple Commands
-  uses: ./
-  with:
-    command: |
-      echo "Starting tests..."
-      npm test
-      echo "Tests complete!"
-```
-
 ### Handle errors
 
 ```yaml
 - name: Run Command
   id: run
-  uses: ./
+  uses: eriksw/exec-action@main
   with:
     command: 'some-command-that-might-fail'
   continue-on-error: true
@@ -137,7 +114,7 @@ The exit code of the executed command (as a string).
 
 ```yaml
 - name: Run Linter
-  uses: ./
+  uses: eriksw/exec-action@main
   with:
     command: 'eslint .'
     # Treat exit codes 0 (no issues) and 1 (warnings only) as success
@@ -148,7 +125,7 @@ The exit code of the executed command (as a string).
 
 ```yaml
 - name: Run Tests
-  uses: ./
+  uses: eriksw/exec-action@main
   with:
     command: 'pytest'
     # Treat exit codes 0-5 as success
@@ -159,7 +136,7 @@ The exit code of the executed command (as a string).
 
 ```yaml
 - name: Complex Command
-  uses: ./
+  uses: eriksw/exec-action@main
   with:
     command: 'some-tool --check'
     # Accept 0, any code from 10-15, and 20 as success
