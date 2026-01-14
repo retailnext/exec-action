@@ -1,17 +1,17 @@
 {
-  "name": "typescript-action",
-  "description": "GitHub Actions TypeScript template",
+  "name": "exec-action",
+  "description": "Command execution GitHub Action with signal passing",
   "version": "0.0.0",
-  "author": "",
+  "author": "Erik Swanson",
   "type": "module",
   "private": true,
-  "homepage": "https://github.com/actions/typescript-action",
+  "homepage": "https://github.com/eriksw/exec-action",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/actions/typescript-action.git"
+    "url": "git+https://github.com/eriksw/exec-action.git"
   },
   "bugs": {
-    "url": "https://github.com/actions/typescript-action/issues"
+    "url": "https://github.com/eriksw/exec-action/issues"
   },
   "keywords": [
     "actions"
