@@ -2,16 +2,16 @@
   "name": "exec-action",
   "description": "Command execution GitHub Action with signal passing",
   "version": "0.0.0",
-  "author": "Erik Swanson",
+  "author": "RetailNext",
   "type": "module",
   "private": true,
-  "homepage": "https://github.com/eriksw/exec-action",
+  "homepage": "https://github.com/retailnext/exec-action",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/eriksw/exec-action.git"
+    "url": "git+https://github.com/retailnext/exec-action.git"
   },
   "bugs": {
-    "url": "https://github.com/eriksw/exec-action/issues"
+    "url": "https://github.com/retailnext/exec-action/issues"
   },
   "keywords": [
     "actions"
