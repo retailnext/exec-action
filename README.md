@@ -33,7 +33,7 @@ steps:
 
   - name: Execute Command
     id: exec
-    uses: eriksw/exec-action@main
+    uses: retailnext/exec-action@main
     with:
       command: 'echo "Hello World"'
 
@@ -84,7 +84,7 @@ The exit code of the executed command (as a string).
 ```yaml
 - name: Build Project
   id: build
-  uses: eriksw/exec-action@main
+  uses: retailnext/exec-action@main
   with:
     command: 'npm run build'
 
@@ -98,7 +98,7 @@ The exit code of the executed command (as a string).
 ```yaml
 - name: Run Command
   id: run
-  uses: eriksw/exec-action@main
+  uses: retailnext/exec-action@main
   with:
     command: 'some-command-that-might-fail'
   continue-on-error: true
@@ -114,7 +114,7 @@ The exit code of the executed command (as a string).
 
 ```yaml
 - name: Run Linter
-  uses: eriksw/exec-action@main
+  uses: retailnext/exec-action@main
   with:
     command: 'eslint .'
     # Treat exit codes 0 (no issues) and 1 (warnings only) as success
@@ -125,7 +125,7 @@ The exit code of the executed command (as a string).
 
 ```yaml
 - name: Run Tests
-  uses: eriksw/exec-action@main
+  uses: retailnext/exec-action@main
   with:
     command: 'pytest'
     # Treat exit codes 0-5 as success
@@ -136,7 +136,7 @@ The exit code of the executed command (as a string).
 
 ```yaml
 - name: Complex Command
-  uses: eriksw/exec-action@main
+  uses: retailnext/exec-action@main
   with:
     command: 'some-tool --check'
     # Accept 0, any code from 10-15, and 20 as success

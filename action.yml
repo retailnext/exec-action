@@ -1,6 +1,6 @@
 name: Execute Command
 description: Execute an arbitrary command and capture its output
-author: Erik Swanson
+author: RetailNext
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
