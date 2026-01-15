@@ -23,7 +23,6 @@ it is generated from.
 | `dist/`              | Generated JavaScript Code           |
 | `src/`               | TypeScript Source Code              |
 | `.env.example`       | Environment Variables Example       |
-| `.licensed.yml`      | Licensed Configuration              |
 | `.markdown-lint.yml` | Markdown Linter Configuration       |
 | `.node-version`      | Node.js Version Configuration       |
 | `.prettierrc.yml`    | Prettier Formatter Configuration    |
@@ -65,27 +64,6 @@ command to bundle the TypeScript code into JavaScript:
 ```bash
 npm run bundle
 ```
-
-## Licensed
-
-Any time package.json or package-lock.json are updated, you should run the
-following command to update the cached dependency license information:
-
-```bash
-# Ensure that the licensed tool is installed
-command -v licensed >/dev/null || gem install --user-install licensed
-
-# Add the local gem installation path to PATH
-PATH="$(ruby -r rubygems -e 'puts Gem.user_dir')/bin:$PATH"
-
-# Update the cached license information
-licensed cache
-
-# Check that dependency licenses are approved
-licensed status
-```
-
-If there are any updates to the files in `.licenses/`, commit them.
 
 ## General Coding Guidelines
 
