@@ -1,7 +1,14 @@
 /**
  * Unit tests for src/github-actions.ts
  */
-import { describe, expect, it, jest, beforeEach } from '@jest/globals'
+import {
+  describe,
+  expect,
+  it,
+  jest,
+  beforeEach,
+  afterEach
+} from '@jest/globals'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'

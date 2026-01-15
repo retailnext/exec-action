@@ -41,7 +41,8 @@ export function setOutput(name: string, value: string): void {
   }
 
   // Format: name=value (with proper escaping for multiline values)
-  const delimiter = `ghadelimiter_${Math.random().toString(36).substring(2)}`
+  // Use timestamp + random to ensure uniqueness
+  const delimiter = `ghadelimiter_${Date.now()}_${Math.random().toString(36).substring(2)}`
   const output = `${name}<<${delimiter}\n${value}\n${delimiter}\n`
 
   appendFileSync(outputFile, output, { encoding: 'utf8' })
