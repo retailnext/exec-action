@@ -80,8 +80,8 @@ The combined stdout and stderr of the executed command. Only set when
 
 ### `stdout`
 
-The standard output of the executed command. Only set when `separate_outputs`
-is `true`.
+The standard output of the executed command. Only set when `separate_outputs` is
+`true`.
 
 ### `stderr`
 
