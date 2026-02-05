@@ -22,10 +22,42 @@ describe('main.ts', () => {
   })
 
   describe('run', () => {
-    it('Executes a successful command and sets outputs', async () => {
+    it('Executes a successful command with combined output (default)', async () => {
       core.getInput.mockImplementation((name: string) => {
         if (name === 'command') return 'echo "Hello World"'
         if (name === 'success_exit_codes') return '0'
+        if (name === 'separate_outputs') return ''
+        return ''
+      })
+
+      await run()
+
+      // Verify combined_output was set
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'combined_output',
+        expect.stringContaining('Hello World')
+      )
+      expect(core.setOutput).toHaveBeenCalledWith('exit_code', '0')
+
+      // Verify stdout and stderr were NOT set
+      expect(core.setOutput).not.toHaveBeenCalledWith(
+        'stdout',
+        expect.anything()
+      )
+      expect(core.setOutput).not.toHaveBeenCalledWith(
+        'stderr',
+        expect.anything()
+      )
+
+      // Verify the action did not fail
+      expect(core.setFailed).not.toHaveBeenCalled()
+    })
+
+    it('Executes a successful command with separate outputs when enabled', async () => {
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return 'echo "Hello World"'
+        if (name === 'success_exit_codes') return '0'
+        if (name === 'separate_outputs') return 'true'
         return ''
       })
 
@@ -39,14 +71,44 @@ describe('main.ts', () => {
       expect(core.setOutput).toHaveBeenCalledWith('stderr', expect.any(String))
       expect(core.setOutput).toHaveBeenCalledWith('exit_code', '0')
 
+      // Verify combined_output was NOT set
+      expect(core.setOutput).not.toHaveBeenCalledWith(
+        'combined_output',
+        expect.anything()
+      )
+
       // Verify the action did not fail
       expect(core.setFailed).not.toHaveBeenCalled()
     })
 
-    it('Sets a failed status when command fails', async () => {
+    it('Sets a failed status when command fails (combined mode)', async () => {
       core.getInput.mockImplementation((name: string) => {
         if (name === 'command') return 'false'
         if (name === 'success_exit_codes') return '0'
+        if (name === 'separate_outputs') return ''
+        return ''
+      })
+
+      await run()
+
+      // Verify combined_output was set
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'combined_output',
+        expect.any(String)
+      )
+      expect(core.setOutput).toHaveBeenCalledWith('exit_code', '1')
+
+      // Verify that the action was marked as failed
+      expect(core.setFailed).toHaveBeenCalledWith(
+        expect.stringContaining('Command exited with code 1')
+      )
+    })
+
+    it('Sets a failed status when command fails (separate mode)', async () => {
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return 'false'
+        if (name === 'success_exit_codes') return '0'
+        if (name === 'separate_outputs') return 'true'
         return ''
       })
 
@@ -67,14 +129,17 @@ describe('main.ts', () => {
       core.getInput.mockImplementation((name: string) => {
         if (name === 'command') return 'sh -c "exit 1"'
         if (name === 'success_exit_codes') return '0,1'
+        if (name === 'separate_outputs') return ''
         return ''
       })
 
       await run()
 
-      // Verify outputs were set
-      expect(core.setOutput).toHaveBeenCalledWith('stdout', expect.any(String))
-      expect(core.setOutput).toHaveBeenCalledWith('stderr', expect.any(String))
+      // Verify combined_output was set
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'combined_output',
+        expect.any(String)
+      )
       expect(core.setOutput).toHaveBeenCalledWith('exit_code', '1')
 
       // Verify the action did not fail
@@ -85,6 +150,7 @@ describe('main.ts', () => {
       core.getInput.mockImplementation((name: string) => {
         if (name === 'command') return 'sh -c "exit 5"'
         if (name === 'success_exit_codes') return '0-10'
+        if (name === 'separate_outputs') return ''
         return ''
       })
 
@@ -99,6 +165,7 @@ describe('main.ts', () => {
       core.getInput.mockImplementation((name: string) => {
         if (name === 'command') return 'echo "test\\'
         if (name === 'success_exit_codes') return '0'
+        if (name === 'separate_outputs') return ''
         return ''
       })
 
@@ -223,31 +290,81 @@ describe('main.ts', () => {
   })
 
   describe('executeCommand', () => {
-    it('Captures stdout from a command', async () => {
-      const result = await executeCommand('echo "test output"')
+    it('Captures combined output by default', async () => {
+      const result = await executeCommand('echo "test output"', false)
+
+      expect(result.combinedOutput).toContain('test output')
+      expect(result.exitCode).toBe(0)
+      // In combined mode, stdout and stderr should be empty
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toBe('')
+    })
+
+    it('Captures stdout separately when separate_outputs is true', async () => {
+      const result = await executeCommand('echo "test output"', true)
 
       expect(result.stdout).toContain('test output')
       expect(result.exitCode).toBe(0)
+      // combinedOutput should be empty in separate mode
+      expect(result.combinedOutput).toBe('')
     })
 
-    it('Captures stderr from a command', async () => {
+    it('Captures stderr separately when separate_outputs is true', async () => {
       // Use sh to redirect to stderr since we can't use shell operators directly
-      const result = await executeCommand('sh -c "echo error output >&2"')
+      const result = await executeCommand('sh -c "echo error output >&2"', true)
 
       expect(result.stderr).toContain('error output')
       expect(result.exitCode).toBe(0)
     })
 
+    it('Captures stderr in combined mode', async () => {
+      // Use sh to redirect to stderr
+      const result = await executeCommand(
+        'sh -c "echo error output >&2"',
+        false
+      )
+
+      expect(result.combinedOutput).toContain('error output')
+      expect(result.exitCode).toBe(0)
+    })
+
+    it('Captures both stdout and stderr in combined mode', async () => {
+      // Use sh to output to both streams
+      const result = await executeCommand(
+        'sh -c "echo stdout output && echo stderr output >&2"',
+        false
+      )
+
+      expect(result.combinedOutput).toContain('stdout output')
+      expect(result.combinedOutput).toContain('stderr output')
+      expect(result.exitCode).toBe(0)
+    })
+
     it('Captures exit code from a failed command', async () => {
       // Use sh to exit with a specific code
-      const result = await executeCommand('sh -c "exit 42"')
+      const result = await executeCommand('sh -c "exit 42"', false)
 
       expect(result.exitCode).toBe(42)
     })
 
-    it('Handles multi-line output', async () => {
+    it('Handles multi-line output in combined mode', async () => {
       // Use sh to run multiple echo commands
-      const result = await executeCommand('sh -c "echo line1 && echo line2"')
+      const result = await executeCommand(
+        'sh -c "echo line1 && echo line2"',
+        false
+      )
+
+      expect(result.combinedOutput).toContain('line1')
+      expect(result.combinedOutput).toContain('line2')
+      expect(result.exitCode).toBe(0)
+    })
+
+    it('Handles multi-line output in separate mode', async () => {
+      // Use sh to run multiple echo commands
+      const result = await executeCommand(
+        'sh -c "echo line1 && echo line2"',
+        true
+      )
 
       expect(result.stdout).toContain('line1')
       expect(result.stdout).toContain('line2')
@@ -256,18 +373,18 @@ describe('main.ts', () => {
 
     it('Works with commands in PATH', async () => {
       // Test that we can find executables in PATH without full path
-      const result = await executeCommand('ls -la')
+      const result = await executeCommand('ls -la', false)
 
       expect(result.exitCode).toBe(0)
-      expect(result.stdout.length).toBeGreaterThan(0)
+      expect(result.combinedOutput!.length).toBeGreaterThan(0)
     })
 
     it('Works with npm commands', async () => {
       // Test that npm in PATH works
-      const result = await executeCommand('npm --version')
+      const result = await executeCommand('npm --version', false)
 
       expect(result.exitCode).toBe(0)
-      expect(result.stdout.length).toBeGreaterThan(0)
+      expect(result.combinedOutput!.length).toBeGreaterThan(0)
     })
   })
 })

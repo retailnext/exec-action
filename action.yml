@@ -18,13 +18,27 @@ inputs:
       (e.g., "0,1,2") or ranges (e.g., "0-2,5,10-15"). Default is "0".
     required: false
     default: '0'
+  separate_outputs:
+    description: >
+      When false (default), stdout and stderr are combined into a single output
+      stream (combined_output). When true, stdout and stderr are captured
+      separately.
+    required: false
+    default: 'false'
 
 # Define your outputs here.
 outputs:
+  combined_output:
+    description: >
+      The combined stdout and stderr of the command (only set when
+      separate_outputs is false)
   stdout:
-    description: The standard output of the command
+    description: >
+      The standard output of the command (only set when separate_outputs is
+      true)
   stderr:
-    description: The standard error of the command
+    description: >
+      The standard error of the command (only set when separate_outputs is true)
   exit_code:
     description: The exit code of the command
 

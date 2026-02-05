@@ -66,19 +66,31 @@ async function run() {
     try {
         const command = getInput('command', { required: true });
         const successExitCodesInput = getInput('success_exit_codes');
+        const separateOutputsInput = getInput('separate_outputs');
         debug(`Executing command: ${command}`);
         debug(`Success exit codes: ${successExitCodesInput}`);
-        // Parse success exit codes
+        debug(`Separate outputs: ${separateOutputsInput}`);
+        // Parse inputs
         const successExitCodes = parseSuccessExitCodes(successExitCodesInput);
+        const separateOutputs = separateOutputsInput.toLowerCase() === 'true' ||
+            separateOutputsInput === '1';
         // Execute the command and capture outputs
-        const result = await executeCommand(command);
-        // Set outputs for other workflow steps to use
-        setOutput('stdout', result.stdout);
-        setOutput('stderr', result.stderr);
+        const result = await executeCommand(command, separateOutputs);
+        // Set outputs based on separate_outputs flag
+        if (separateOutputs) {
+            setOutput('stdout', result.stdout);
+            setOutput('stderr', result.stderr);
+        }
+        else {
+            setOutput('combined_output', result.combinedOutput || '');
+        }
         setOutput('exit_code', result.exitCode.toString());
         // Check if the exit code should be treated as success
         if (!successExitCodes.has(result.exitCode)) {
-            setFailed(`Command exited with code ${result.exitCode}: ${result.stderr || result.stdout}`);
+            const errorOutput = separateOutputs
+                ? result.stderr || result.stdout
+                : result.combinedOutput;
+            setFailed(`Command exited with code ${result.exitCode}: ${errorOutput}`);
         }
     }
     catch (error) {
@@ -138,9 +150,10 @@ function parseSuccessExitCodes(input) {
  * Execute a command and capture its output.
  *
  * @param command The command to execute.
- * @returns A promise that resolves with stdout, stderr, and exit code.
+ * @param separateOutputs Whether to capture stdout and stderr separately.
+ * @returns A promise that resolves with stdout, stderr, combinedOutput, and exit code.
  */
-async function executeCommand(command) {
+async function executeCommand(command, separateOutputs = false) {
     return new Promise((resolve, reject) => {
         // Parse command into executable and arguments
         // Simple parsing that splits on whitespace while respecting quoted strings
@@ -157,22 +170,42 @@ async function executeCommand(command) {
         });
         let stdout = '';
         let stderr = '';
+        let combinedOutput = '';
         let settled = false;
-        // Capture and stream stdout
-        if (child.stdout) {
-            child.stdout.on('data', (data) => {
-                const text = data.toString();
-                stdout += text;
-                process.stdout.write(text);
-            });
+        if (separateOutputs) {
+            // Separate mode: capture stdout and stderr independently
+            if (child.stdout) {
+                child.stdout.on('data', (data) => {
+                    const text = data.toString();
+                    stdout += text;
+                    process.stdout.write(text);
+                });
+            }
+            if (child.stderr) {
+                child.stderr.on('data', (data) => {
+                    const text = data.toString();
+                    stderr += text;
+                    process.stderr.write(text);
+                });
+            }
         }
-        // Capture and stream stderr
-        if (child.stderr) {
-            child.stderr.on('data', (data) => {
-                const text = data.toString();
-                stderr += text;
-                process.stderr.write(text);
-            });
+        else {
+            // Combined mode: merge stdout and stderr into one stream
+            // Both streams are captured and written to stdout only
+            if (child.stdout) {
+                child.stdout.on('data', (data) => {
+                    const text = data.toString();
+                    combinedOutput += text;
+                    process.stdout.write(text);
+                });
+            }
+            if (child.stderr) {
+                child.stderr.on('data', (data) => {
+                    const text = data.toString();
+                    combinedOutput += text;
+                    process.stdout.write(text);
+                });
+            }
         }
         // Forward signals to the child process
         const signals = [
@@ -216,6 +249,7 @@ async function executeCommand(command) {
                 resolve({
                     stdout,
                     stderr,
+                    combinedOutput,
                     exitCode: code ?? 0
                 });
             }

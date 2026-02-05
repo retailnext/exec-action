@@ -13,7 +13,8 @@ real-time and forwards signals to the command.
 ## Features
 
 - Execute any single command
-- Capture standard output, standard error, and exit code as action outputs
+- Capture command output (combined or separate stdout/stderr) and exit code as
+  action outputs
 - Stream output in real-time to the workflow logs
 - Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the
   running command
@@ -40,8 +41,7 @@ steps:
   - name: Print Output
     run: |
       echo "Exit Code: ${{ steps.exec.outputs.exit_code }}"
-      echo "Stdout: ${{ steps.exec.outputs.stdout }}"
-      echo "Stderr: ${{ steps.exec.outputs.stderr }}"
+      echo "Output: ${{ steps.exec.outputs.combined_output }}"
 ```
 
 ## Inputs
@@ -63,15 +63,30 @@ be considered successful. For example, some linters return specific exit codes
 for warnings vs errors, or you may want to accept multiple exit codes as valid
 outcomes.
 
+### `separate_outputs`
+
+**Optional** When `false` (default), stdout and stderr are combined into a
+single output stream (`combined_output`). When `true`, stdout and stderr are
+captured separately and available as individual outputs.
+
+Default is `"false"`, which means output is combined by default.
+
 ## Outputs
+
+### `combined_output`
+
+The combined stdout and stderr of the executed command. Only set when
+`separate_outputs` is `false` (default).
 
 ### `stdout`
 
-The standard output of the executed command.
+The standard output of the executed command. Only set when `separate_outputs`
+is `true`.
 
 ### `stderr`
 
-The standard error of the executed command.
+The standard error of the executed command. Only set when `separate_outputs` is
+`true`.
 
 ### `exit_code`
 
@@ -107,7 +122,23 @@ The exit code of the executed command (as a string).
   if: steps.run.outputs.exit_code != '0'
   run: |
     echo "Command failed with exit code ${{ steps.run.outputs.exit_code }}"
-    echo "Error output: ${{ steps.run.outputs.stderr }}"
+    echo "Error output: ${{ steps.run.outputs.combined_output }}"
+```
+
+### Capture stdout and stderr separately
+
+```yaml
+- name: Run Command with Separate Outputs
+  id: run
+  uses: retailnext/exec-action@main
+  with:
+    command: 'my-command --verbose'
+    separate_outputs: true
+
+- name: Print Outputs
+  run: |
+    echo "Standard Output: ${{ steps.run.outputs.stdout }}"
+    echo "Standard Error: ${{ steps.run.outputs.stderr }}"
 ```
 
 ### Accept multiple exit codes as success
