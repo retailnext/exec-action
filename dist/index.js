@@ -82,7 +82,7 @@ async function run() {
             setOutput('stderr', result.stderr);
         }
         else {
-            setOutput('combined_output', result.combinedOutput || '');
+            setOutput('combined_output', result.combinedOutput);
         }
         setOutput('exit_code', result.exitCode.toString());
         // Check if the exit code should be treated as success

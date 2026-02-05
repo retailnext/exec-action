@@ -74,6 +74,62 @@ describe('End-to-End Tests', () => {
       expect(core.setFailed).not.toHaveBeenCalled()
     })
 
+    it('Actually runs child process and captures both streams in combined mode', async () => {
+      // This test explicitly verifies that a real child process is spawned
+      // and that we correctly capture output from both stdout and stderr
+      const scriptPath = join(tempDir, 'both-streams.sh')
+      writeFileSync(
+        scriptPath,
+        '#!/bin/bash\n' +
+          'echo "STDOUT-LINE-1"\n' +
+          'echo "STDERR-LINE-1" >&2\n' +
+          'echo "STDOUT-LINE-2"\n' +
+          'echo "STDERR-LINE-2" >&2\n' +
+          'echo "STDOUT-LINE-3"\n' +
+          'exit 0\n',
+        { mode: 0o755 }
+      )
+
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return scriptPath
+        if (name === 'success_exit_codes') return '0'
+        if (name === 'separate_outputs') return ''
+        return ''
+      })
+
+      await run()
+
+      // Get the actual combined output
+      const combinedOutputCall = (core.setOutput as jest.Mock).mock.calls.find(
+        (call: [string, string]) => call[0] === 'combined_output'
+      )
+      expect(combinedOutputCall).toBeDefined()
+      const combinedOutput = combinedOutputCall![1]
+
+      // Verify we captured ALL output from BOTH streams
+      expect(combinedOutput).toContain('STDOUT-LINE-1')
+      expect(combinedOutput).toContain('STDOUT-LINE-2')
+      expect(combinedOutput).toContain('STDOUT-LINE-3')
+      expect(combinedOutput).toContain('STDERR-LINE-1')
+      expect(combinedOutput).toContain('STDERR-LINE-2')
+
+      // Verify the output is non-empty (child process actually ran)
+      expect(combinedOutput.length).toBeGreaterThan(50)
+
+      // Verify no separate stdout/stderr outputs
+      const stdoutCall = (core.setOutput as jest.Mock).mock.calls.find(
+        (call: [string, string]) => call[0] === 'stdout'
+      )
+      const stderrCall = (core.setOutput as jest.Mock).mock.calls.find(
+        (call: [string, string]) => call[0] === 'stderr'
+      )
+      expect(stdoutCall).toBeUndefined()
+      expect(stderrCall).toBeUndefined()
+
+      expect(core.setOutput).toHaveBeenCalledWith('exit_code', '0')
+      expect(core.setFailed).not.toHaveBeenCalled()
+    })
+
     it('Handles command failure with combined output', async () => {
       const scriptPath = join(tempDir, 'fail-script.sh')
       writeFileSync(
@@ -207,6 +263,64 @@ describe('End-to-End Tests', () => {
         'combined_output',
         expect.anything()
       )
+
+      expect(core.setOutput).toHaveBeenCalledWith('exit_code', '0')
+      expect(core.setFailed).not.toHaveBeenCalled()
+    })
+
+    it('Actually runs child process and separates stdout/stderr correctly', async () => {
+      // This test explicitly verifies that a real child process is spawned
+      // and that stdout and stderr are kept separate
+      const scriptPath = join(tempDir, 'separate-streams.sh')
+      writeFileSync(
+        scriptPath,
+        '#!/bin/bash\n' +
+          'echo "ONLY-IN-STDOUT-A"\n' +
+          'echo "ONLY-IN-STDERR-A" >&2\n' +
+          'echo "ONLY-IN-STDOUT-B"\n' +
+          'echo "ONLY-IN-STDERR-B" >&2\n' +
+          'exit 0\n',
+        { mode: 0o755 }
+      )
+
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return scriptPath
+        if (name === 'success_exit_codes') return '0'
+        if (name === 'separate_outputs') return 'true'
+        return ''
+      })
+
+      await run()
+
+      // Get the actual outputs
+      const stdoutCall = (core.setOutput as jest.Mock).mock.calls.find(
+        (call: [string, string]) => call[0] === 'stdout'
+      )
+      const stderrCall = (core.setOutput as jest.Mock).mock.calls.find(
+        (call: [string, string]) => call[0] === 'stderr'
+      )
+
+      expect(stdoutCall).toBeDefined()
+      expect(stderrCall).toBeDefined()
+
+      const stdout = stdoutCall![1]
+      const stderr = stderrCall![1]
+
+      // Verify stdout contains ONLY stdout messages
+      expect(stdout).toContain('ONLY-IN-STDOUT-A')
+      expect(stdout).toContain('ONLY-IN-STDOUT-B')
+      expect(stdout).not.toContain('ONLY-IN-STDERR')
+
+      // Verify stderr contains ONLY stderr messages
+      expect(stderr).toContain('ONLY-IN-STDERR-A')
+      expect(stderr).toContain('ONLY-IN-STDERR-B')
+      expect(stderr).not.toContain('ONLY-IN-STDOUT')
+
+      // Verify combined_output was NOT set
+      const combinedCall = (core.setOutput as jest.Mock).mock.calls.find(
+        (call: [string, string]) => call[0] === 'combined_output'
+      )
+      expect(combinedCall).toBeUndefined()
 
       expect(core.setOutput).toHaveBeenCalledWith('exit_code', '0')
       expect(core.setFailed).not.toHaveBeenCalled()

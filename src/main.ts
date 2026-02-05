@@ -30,7 +30,7 @@ export async function run(): Promise<void> {
       core.setOutput('stdout', result.stdout)
       core.setOutput('stderr', result.stderr)
     } else {
-      core.setOutput('combined_output', result.combinedOutput || '')
+      core.setOutput('combined_output', result.combinedOutput)
     }
     core.setOutput('exit_code', result.exitCode.toString())
 
@@ -129,7 +129,7 @@ export async function executeCommand(
 ): Promise<{
   stdout: string
   stderr: string
-  combinedOutput?: string
+  combinedOutput: string
   exitCode: number
 }> {
   return new Promise((resolve, reject) => {
