@@ -153,6 +153,26 @@ throughout the repository must be kept in sync with this runtime version.
 **Source of Truth**: The `runs.using` field in `action.yml` (e.g., `nodeXX`) is
 the ultimate source of truth for the Node.js major version.
 
+**Agent Version Verification**: When starting work on this repository, agents
+(including Copilot) must verify they are using the correct Node.js major
+version:
+
+1. Check the expected major version: `grep -oP 'using:\s*node\K\d+' action.yml`
+2. Check your current Node.js version: `node --version`
+3. Verify the major versions match. If they don't, this is a critical error that
+   must be reported to the user immediately.
+
+Example verification:
+
+```bash
+EXPECTED=$(grep -oP 'using:\s*node\K\d+' action.yml)
+ACTUAL=$(node --version | grep -oP 'v\K\d+')
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  echo "ERROR: Node.js version mismatch! Expected v$EXPECTED but using v$ACTUAL"
+  exit 1
+fi
+```
+
 **Files that must stay aligned**:
 
 - `.node-version` - Should specify the major version to use the latest LTS
