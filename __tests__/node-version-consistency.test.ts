@@ -30,7 +30,7 @@ describe('Node.js Version Consistency', () => {
 
     // Extract major version from @types/node version string
     // Format could be: ^24.0.0, ~24.0.0, 24.0.0, etc.
-    const match = typesNodeVersion.match(/(\d+)\.\d+\.\d+/)
+    const match = typesNodeVersion.match(/[~^]?(\d+)\.\d+\.\d+/)
     expect(match).not.toBeNull()
 
     const typesNodeMajor = parseInt(match[1], 10)
