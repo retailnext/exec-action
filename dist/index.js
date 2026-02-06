@@ -223,10 +223,14 @@ async function executeCommand(command, separateOutputs = false) {
         }
         else {
             // Combined mode: create a FIFO (named pipe) and pass it to both stdout and stderr
+            // Note: Node.js doesn't expose pipe() syscall for anonymous pipes,
+            // so we use mkfifo to create a named pipe which provides the same behavior
             const fifoPath = join(tmpdir(), `exec-action-${Date.now()}-${Math.random().toString(36).slice(2)}.fifo`);
             try {
                 // Create a FIFO (named pipe)
                 execSync(`mkfifo "${fifoPath}"`);
+                // Track if reader has ended
+                let readerEnded = false;
                 // Open the FIFO for reading (non-blocking)
                 const reader = createReadStream(fifoPath, { flags: 'r' });
                 reader.on('data', (data) => {
@@ -234,10 +238,13 @@ async function executeCommand(command, separateOutputs = false) {
                     combinedOutput += text;
                     process.stdout.write(text);
                 });
+                reader.on('end', () => {
+                    readerEnded = true;
+                });
                 reader.on('error', (error) => {
                     if (!settled) {
                         settled = true;
-                        reader.close();
+                        reader.destroy();
                         try {
                             unlinkSync(fifoPath);
                         }
@@ -253,6 +260,14 @@ async function executeCommand(command, separateOutputs = false) {
                     let writeFd = null;
                     try {
                         writeFd = openSync(fifoPath, 'w');
+                        // Unlink the FIFO immediately after both ends are open
+                        // The file descriptors will continue to work until closed
+                        try {
+                            unlinkSync(fifoPath);
+                        }
+                        catch (e) {
+                            // Ignore if already unlinked
+                        }
                         // Spawn with the same fd for both stdout and stderr
                         const child = spawn(executable, commandArgs, {
                             stdio: ['inherit', writeFd, writeFd]
@@ -261,63 +276,78 @@ async function executeCommand(command, separateOutputs = false) {
                         setupSignalHandlers(child, () => {
                             if (!settled) {
                                 settled = true;
-                                if (writeFd !== null)
-                                    closeSync(writeFd);
-                                reader.close();
-                                try {
-                                    unlinkSync(fifoPath);
+                                if (writeFd !== null) {
+                                    try {
+                                        closeSync(writeFd);
+                                    }
+                                    catch (e) {
+                                        // Ignore close errors
+                                    }
                                 }
-                                catch (e) {
-                                    // Ignore cleanup errors
-                                }
+                                reader.destroy();
                             }
                         });
                         child.on('error', (error) => {
                             if (!settled) {
                                 settled = true;
-                                if (writeFd !== null)
-                                    closeSync(writeFd);
-                                reader.close();
-                                try {
-                                    unlinkSync(fifoPath);
+                                if (writeFd !== null) {
+                                    try {
+                                        closeSync(writeFd);
+                                    }
+                                    catch (e) {
+                                        // Ignore close errors
+                                    }
                                 }
-                                catch (e) {
-                                    // Ignore cleanup errors
-                                }
+                                reader.destroy();
                                 reject(error);
                             }
                         });
                         child.on('close', (code) => {
                             if (!settled) {
                                 settled = true;
-                                // Close the write fd
-                                if (writeFd !== null)
-                                    closeSync(writeFd);
-                                // Wait a bit for any pending data to be read
-                                setTimeout(() => {
-                                    reader.close();
+                                // Close the write fd first
+                                if (writeFd !== null) {
                                     try {
-                                        unlinkSync(fifoPath);
+                                        closeSync(writeFd);
+                                        writeFd = null;
                                     }
                                     catch (e) {
-                                        // Ignore cleanup errors
+                                        // Ignore close errors
                                     }
+                                }
+                                // Function to finalize and resolve
+                                const finalize = () => {
+                                    reader.destroy();
                                     resolve({
                                         stdout,
                                         stderr,
                                         combinedOutput,
                                         exitCode: code ?? 0
                                     });
-                                }, 100);
+                                };
+                                // If reader has already ended, finalize immediately
+                                // Otherwise wait a bit for final data
+                                if (readerEnded) {
+                                    finalize();
+                                }
+                                else {
+                                    setTimeout(finalize, 50);
+                                }
                             }
                         });
                     }
                     catch (error) {
                         if (!settled) {
                             settled = true;
-                            if (writeFd !== null)
-                                closeSync(writeFd);
-                            reader.close();
+                            if (writeFd !== null) {
+                                try {
+                                    closeSync(writeFd);
+                                }
+                                catch (e) {
+                                    // Ignore close errors
+                                }
+                            }
+                            reader.destroy();
                             try {
                                 unlinkSync(fifoPath);
                             }
