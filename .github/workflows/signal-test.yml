@@ -32,6 +32,8 @@ jobs:
           # Run the test script for 120 seconds, but timeout after
           # 1 minute to test signal forwarding
           command: node __fixtures__/signal-test.js 120
+          # Use separate outputs for signal tests
+          separate_outputs: true
 
       - name: Verify Test Output
         if: always()
@@ -89,6 +91,8 @@ jobs:
             sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 5; echo
             'Sending SIGTERM to test graceful shutdown...'; kill -TERM $PID;
             wait $PID"
+          # Use separate outputs for signal tests
+          separate_outputs: true
 
       - name: Check Graceful Shutdown
         run: |
@@ -120,6 +124,8 @@ jobs:
           command:
             sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 3; echo
             'Sending SIGHUP...'; kill -HUP $PID; wait $PID"
+          # Use separate outputs for signal tests
+          separate_outputs: true
 
       - name: Verify SIGHUP Handling
         run: |
@@ -140,6 +146,8 @@ jobs:
           command:
             sh -c "node __fixtures__/signal-test.js 120 & PID=$!; sleep 3; echo
             'Sending SIGINT...'; kill -INT $PID; wait $PID"
+          # Use separate outputs for signal tests
+          separate_outputs: true
 
       - name: Verify SIGINT Handling
         run: |

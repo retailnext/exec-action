@@ -1,5 +1,8 @@
 import { spawn } from 'child_process'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import * as core from './github-actions.js'
+import { FifoPipe } from './fifo-stream.js'
 
 /**
  * The main function for the action.
@@ -10,25 +13,38 @@ export async function run(): Promise<void> {
   try {
     const command: string = core.getInput('command', { required: true })
     const successExitCodesInput: string = core.getInput('success_exit_codes')
+    const separateOutputsInput: string = core.getInput('separate_outputs')
 
     core.debug(`Executing command: ${command}`)
     core.debug(`Success exit codes: ${successExitCodesInput}`)
+    core.debug(`Separate outputs: ${separateOutputsInput}`)
 
-    // Parse success exit codes
+    // Parse inputs
     const successExitCodes = parseSuccessExitCodes(successExitCodesInput)
+    // Default to false (combined outputs)
+    const separateOutputs =
+      separateOutputsInput.toLowerCase() === 'true' ||
+      separateOutputsInput === '1'
 
     // Execute the command and capture outputs
-    const result = await executeCommand(command)
+    const result = await executeCommand(command, separateOutputs)
 
-    // Set outputs for other workflow steps to use
-    core.setOutput('stdout', result.stdout)
-    core.setOutput('stderr', result.stderr)
+    // Set outputs based on separate_outputs flag
+    if (separateOutputs) {
+      core.setOutput('stdout', result.stdout)
+      core.setOutput('stderr', result.stderr)
+    } else {
+      core.setOutput('combined_output', result.combinedOutput)
+    }
     core.setOutput('exit_code', result.exitCode.toString())
 
     // Check if the exit code should be treated as success
     if (!successExitCodes.has(result.exitCode)) {
+      const errorOutput = separateOutputs
+        ? result.stderr || result.stdout
+        : result.combinedOutput
       core.setFailed(
-        `Command exited with code ${result.exitCode}: ${result.stderr || result.stdout}`
+        `Command exited with code ${result.exitCode}: ${errorOutput}`
       )
     }
   } catch (error) {
@@ -108,16 +124,20 @@ export function parseSuccessExitCodes(input: string): Set<number> {
  * Execute a command and capture its output.
  *
  * @param command The command to execute.
- * @returns A promise that resolves with stdout, stderr, and exit code.
+ * @param separateOutputs Whether to capture stdout and stderr separately.
+ * @returns A promise that resolves with stdout, stderr, combinedOutput, and exit code.
  */
-export async function executeCommand(command: string): Promise<{
+export async function executeCommand(
+  command: string,
+  separateOutputs: boolean = false
+): Promise<{
   stdout: string
   stderr: string
+  combinedOutput: string
   exitCode: number
 }> {
   return new Promise((resolve, reject) => {
     // Parse command into executable and arguments
-    // Simple parsing that splits on whitespace while respecting quoted strings
     const args = parseCommand(command)
     if (args.length === 0) {
       reject(new Error('Command cannot be empty'))
@@ -127,84 +147,194 @@ export async function executeCommand(command: string): Promise<{
     const executable = args[0]
     const commandArgs = args.slice(1)
 
-    // Execute command directly without shell
-    const child = spawn(executable, commandArgs, {
-      stdio: ['inherit', 'pipe', 'pipe']
-    })
-
     let stdout = ''
     let stderr = ''
+    const combinedOutput = ''
     let settled = false
 
-    // Capture and stream stdout
-    if (child.stdout) {
-      child.stdout.on('data', (data: Buffer) => {
-        const text = data.toString()
-        stdout += text
-        process.stdout.write(text)
+    if (separateOutputs) {
+      // Separate mode: use two different pipes for stdout and stderr
+      const child = spawn(executable, commandArgs, {
+        stdio: ['inherit', 'pipe', 'pipe']
       })
-    }
 
-    // Capture and stream stderr
-    if (child.stderr) {
-      child.stderr.on('data', (data: Buffer) => {
-        const text = data.toString()
-        stderr += text
-        process.stderr.write(text)
-      })
-    }
-
-    // Forward signals to the child process
-    const signals: NodeJS.Signals[] = [
-      'SIGINT',
-      'SIGTERM',
-      'SIGQUIT',
-      'SIGHUP',
-      'SIGPIPE',
-      'SIGABRT'
-    ]
-
-    // Create individual signal handlers for proper cleanup
-    const signalHandlers = new Map<NodeJS.Signals, () => void>()
-    for (const signal of signals) {
-      const handler = () => {
-        core.debug(`Received ${signal}, forwarding to child process`)
-        child.kill(signal)
-      }
-      signalHandlers.set(signal, handler)
-      process.on(signal, handler)
-    }
-
-    // Clean up signal handlers when child closes
-    const cleanupSignalHandlers = () => {
-      for (const [signal, handler] of signalHandlers) {
-        process.removeListener(signal, handler)
-      }
-      signalHandlers.clear()
-    }
-
-    // Handle errors (e.g., command not found)
-    child.on('error', (error: Error) => {
-      if (!settled) {
-        settled = true
-        cleanupSignalHandlers()
-        reject(error)
-      }
-    })
-
-    // Handle process exit
-    child.on('close', (code: number | null) => {
-      if (!settled) {
-        settled = true
-        cleanupSignalHandlers()
-        resolve({
-          stdout,
-          stderr,
-          exitCode: code ?? 0
+      // Capture and stream stdout
+      if (child.stdout) {
+        child.stdout.on('data', (data: Buffer) => {
+          const text = data.toString()
+          stdout += text
+          process.stdout.write(text)
         })
       }
-    })
+
+      // Capture and stream stderr
+      if (child.stderr) {
+        child.stderr.on('data', (data: Buffer) => {
+          const text = data.toString()
+          stderr += text
+          process.stderr.write(text)
+        })
+      }
+
+      // Register error handler BEFORE setupSignalHandlers to avoid race condition
+      // where setupSignalHandlers' error handler resolves instead of rejecting
+      child.on('error', (error: Error) => {
+        if (!settled) {
+          settled = true
+          reject(error)
+        }
+      })
+
+      child.on('close', (code: number | null) => {
+        if (!settled) {
+          settled = true
+          resolve({
+            stdout,
+            stderr,
+            combinedOutput,
+            exitCode: code ?? 0
+          })
+        }
+      })
+
+      // Forward signals and handle process lifecycle
+      // This is registered AFTER error/close handlers to ensure proper event ordering
+      setupSignalHandlers(child, () => {
+        if (!settled) {
+          settled = true
+          resolve({
+            stdout,
+            stderr,
+            combinedOutput,
+            exitCode: 0
+          })
+        }
+      })
+    } else {
+      // Combined mode: Use FIFO-based stream to pass same fd to both stdout and stderr
+      const fifoPath = join(
+        tmpdir(),
+        `exec-action-${Date.now()}-${Math.random().toString(36).slice(2)}.fifo`
+      )
+
+      core.debug(`[Combined Mode] Using FIFO at ${fifoPath}`)
+
+      const fifoPipe = new FifoPipe(fifoPath)
+
+      // Open the FIFO and handle the process
+      fifoPipe
+        .open()
+        .then((writeFd) => {
+          core.debug(`[Combined Mode] FIFO opened with fd ${writeFd}`)
+
+          // Spawn with the same fd for both stdout and stderr
+          core.debug(
+            `[Combined Mode] Spawning child: ${executable} ${commandArgs.join(' ')}`
+          )
+          const child = spawn(executable, commandArgs, {
+            stdio: ['inherit', writeFd, writeFd]
+          })
+          core.debug(`[Combined Mode] Child spawned with PID ${child.pid}`)
+
+          // Set up signal handlers
+          setupSignalHandlers(child, () => {
+            // Signal handler cleanup - close write fd only
+            fifoPipe.closeWriteFd()
+          })
+
+          // Register error handler BEFORE setupSignalHandlers to avoid race condition
+          child.on('error', (error: Error) => {
+            core.debug(`[Combined Mode] Child error: ${error.message}`)
+            if (!settled) {
+              settled = true
+              fifoPipe.close()
+              reject(error)
+            }
+          })
+
+          child.on('close', (code: number | null) => {
+            core.debug(`[Combined Mode] Child closed with code ${code}`)
+            if (!settled) {
+              settled = true
+
+              // Wait for all data to be received
+              fifoPipe
+                .waitForCompletion()
+                .then(() => {
+                  // Get the output and close
+                  const combinedOutput = fifoPipe.getOutput()
+                  fifoPipe.close()
+
+                  core.debug('[Combined Mode] Resolving with output')
+                  resolve({
+                    stdout: '',
+                    stderr: '',
+                    combinedOutput,
+                    exitCode: code ?? 0
+                  })
+                })
+                .catch((err) => {
+                  core.debug(
+                    `[Combined Mode] Error in waitForCompletion: ${err}`
+                  )
+                  fifoPipe.close()
+                  reject(err)
+                })
+            }
+          })
+        })
+        .catch((error) => {
+          core.debug(`[Combined Mode] Error: ${error}`)
+          if (!settled) {
+            settled = true
+            fifoPipe.close()
+            reject(error)
+          }
+        })
+    }
   })
+}
+
+/**
+ * Set up signal forwarding for a child process.
+ *
+ * @param child The child process to forward signals to.
+ * @param cleanup Cleanup function to call when removing handlers.
+ */
+function setupSignalHandlers(
+  child: ReturnType<typeof spawn>,
+  cleanup: () => void
+): void {
+  const signals: NodeJS.Signals[] = [
+    'SIGINT',
+    'SIGTERM',
+    'SIGQUIT',
+    'SIGHUP',
+    'SIGPIPE',
+    'SIGABRT'
+  ]
+
+  const signalHandlers = new Map<NodeJS.Signals, () => void>()
+  for (const signal of signals) {
+    const handler = () => {
+      core.debug(`Received ${signal}, forwarding to child process`)
+      child.kill(signal)
+    }
+    signalHandlers.set(signal, handler)
+    process.on(signal, handler)
+  }
+
+  // Clean up signal handlers when child closes
+  const cleanupSignalHandlers = () => {
+    for (const [signal, handler] of signalHandlers) {
+      process.removeListener(signal, handler)
+    }
+    signalHandlers.clear()
+    cleanup()
+  }
+
+  child.on('close', cleanupSignalHandlers)
+  child.on('error', cleanupSignalHandlers)
 }
 
 /**

@@ -39,11 +39,20 @@ it is generated from.
 
 ## Environment Setup
 
-Install dependencies by running:
+**CRITICAL**: Before running any tests or making code changes, always install
+dependencies first:
 
 ```bash
 npm install
 ```
+
+This ensures that all required packages (Jest, TypeScript, etc.) are available
+and tests can run properly. Dependencies must be installed before:
+
+- Running tests
+- Running linters
+- Building/bundling code
+- Making any code changes
 
 ## Testing
 
@@ -53,8 +62,72 @@ Ensure all unit tests pass by running:
 npm run test
 ```
 
-Unit tests should exist in the `__tests__` directory. They are powered by
-`jest`. Fixtures should be placed in the `__fixtures__` directory.
+Unit tests should exist in the `__tests__` directory. They are powered by Jest.
+Fixtures should be placed in the `__fixtures__` directory.
+
+**Important**: Always run `npm install` before running tests to ensure all test
+dependencies are available.
+
+## Linting and Formatting
+
+**CRITICAL**: Lint errors will prevent a pull request from being merged. They
+MUST always be checked for and MUST always be fixed before committing.
+
+**ALWAYS** run linting and formatting checks after making any code changes and
+before bundling or committing:
+
+```bash
+npm run lint
+npm run format:check
+```
+
+**If there are ANY lint errors, you MUST fix them before proceeding.** The CI
+pipeline will fail and the PR cannot be merged if lint errors are present.
+
+If there are formatting issues, fix them with:
+
+```bash
+npm run format:write
+```
+
+If there are linting errors, fix them before proceeding. Do not commit code with
+linting errors.
+
+### Super-Linter for Markdown and Shell Files
+
+**Before updating any pull request**, if there are changes to Markdown or shell
+files between the base branch and current state, run the super-linter Docker
+image exactly as the CI workflow does:
+
+```bash
+docker run --rm \
+  -e RUN_LOCAL=true \
+  -e USE_FIND_ALGORITHM=true \
+  -e CHECKOV_FILE_NAME=.checkov.yml \
+  -e FILTER_REGEX_EXCLUDE="dist/**/*" \
+  -e LINTER_RULES_PATH=. \
+  -e VALIDATE_ALL_CODEBASE=true \
+  -e VALIDATE_BIOME_FORMAT=false \
+  -e VALIDATE_BIOME_LINT=false \
+  -e VALIDATE_GITHUB_ACTIONS_ZIZMOR=false \
+  -e VALIDATE_JAVASCRIPT_ES=false \
+  -e VALIDATE_JSCPD=false \
+  -e VALIDATE_TYPESCRIPT_ES=false \
+  -e VALIDATE_JSON=false \
+  -v "$(pwd)":/tmp/lint:ro \
+  --workdir=/tmp/lint \
+  ghcr.io/super-linter/super-linter:slim-v8
+```
+
+This command uses all environment variables from the linter workflow
+(`.github/workflows/linter.yml`) except `GITHUB_TOKEN` (not needed for local
+runs) and `DEFAULT_BRANCH` (not compatible with `USE_FIND_ALGORITHM=true`). The
+`RUN_LOCAL=true` flag enables local execution mode. This ensures linting is
+performed using the same versions and configurations as CI.
+
+**Important:** Always check this command against `.github/workflows/linter.yml`
+and update it whenever there are changes to the linter workflow to ensure it
+stays synchronized with the CI configuration.
 
 ## Bundling
 
@@ -64,6 +137,8 @@ command to bundle the TypeScript code into JavaScript:
 ```bash
 npm run bundle
 ```
+
+**Important**: Always run linting checks before bundling to catch errors early.
 
 ## General Coding Guidelines
 
@@ -81,6 +156,8 @@ npm run bundle
 - Use JSDoc comments to document functions, classes, and complex logic
 - After doing any refactoring, ensure to run `npm run test` to ensure that all
   tests still pass and coverage requirements are met
+- **ALWAYS run `npm run lint` after making code changes** to catch errors before
+  committing
 - When suggesting code changes, always opt for the most maintainable approach.
   Try your best to keep the code clean and follow "Don't Repeat Yourself" (DRY)
   principles
@@ -150,13 +227,17 @@ When creating a pull request (PR), please ensure that:
 
 - Keep changes focused and minimal (avoid large changes, or consider breaking
   them into separate, smaller PRs)
-- Formatting checks pass
-- Linting checks pass
+- **Linting checks pass** - Run `npm run lint` and fix all errors
+- **Formatting checks pass** - Run `npm run format:check` or
+  `npm run format:write`
 - Unit tests pass and coverage requirements are met
 - The action has been transpiled to JavaScript and the `dist` directory is
   up-to-date with the latest changes in the `src` directory
 - If necessary, the `README.md` file is updated to reflect any changes in
   functionality or usage
+- If changes affect signal handling or output behavior, ensure the
+  `.github/workflows/signal-test.yml` workflow is updated to test with the
+  correct output format (e.g., `combined_output` vs `stdout`/`stderr`)
 
 The body of the PR should include:
 
