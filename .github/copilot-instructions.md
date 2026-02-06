@@ -98,14 +98,18 @@ Linting errors prevent pull requests from being merged and **MUST** be fixed
 before committing. Always run the appropriate linters and fix all linting
 errors.
 
+**CRITICAL: Before making ANY commit that includes changes to Markdown (`.md`)
+or shell script files, you MUST run the super-linter as described below. This is
+mandatory for EVERY commit, not just PR updates.**
+
 - **For TypeScript/JavaScript code changes**: Run `npm run lint` to check for
   linting errors. Always run `npm install` before running `npm run lint`.
-- **For Markdown file changes**: Run the super-linter Docker image as described
-  below.
+- **For Markdown or shell script file changes**: Run the super-linter Docker
+  image as described below. This must be done before EVERY commit that includes
+  such changes.
 
-**Before updating any pull request**, if there are changes to Markdown files
-between the base branch and current state, run the super-linter Docker image
-exactly as the CI workflow does:
+**Super-Linter Command** - Run this command exactly as shown before committing
+any Markdown or shell script changes:
 
 ```bash
 docker run --rm \
@@ -158,8 +162,8 @@ the ultimate source of truth for the Node.js major version.
 version:
 
 1. Check the expected major version: `grep -oP 'using:\s*node\K\d+' action.yml`
-2. Check your current Node.js version: `node --version`
-3. Verify the major versions match. If they don't, this is a critical error that
+1. Check your current Node.js version: `node --version`
+1. Verify the major versions match. If they don't, this is a critical error that
    must be reported to the user immediately.
 
 Example verification:
