@@ -227,22 +227,30 @@ async function executeCommand(command, separateOutputs = false) {
             // so we use mkfifo to create a named pipe which provides the same behavior
             const fifoPath = join(tmpdir(), `exec-action-${Date.now()}-${Math.random().toString(36).slice(2)}.fifo`);
             let fifoUnlinked = false;
+            debug(`[FIFO] Creating FIFO at ${fifoPath}`);
             try {
                 // Create a FIFO (named pipe)
                 execSync(`mkfifo "${fifoPath}"`);
+                debug('[FIFO] FIFO created successfully');
                 // Track if reader has ended
                 let readerEnded = false;
                 // Open the FIFO for reading (non-blocking)
+                debug('[FIFO] Opening reader');
                 const reader = createReadStream(fifoPath, { flags: 'r' });
+                debug('[FIFO] Reader opened');
                 reader.on('data', (data) => {
                     const text = data.toString();
+                    debug(`[FIFO] Received data: ${text.length} bytes`);
                     combinedOutput += text;
+                    debug(`[FIFO] combinedOutput is now: ${combinedOutput.length} bytes`);
                     process.stdout.write(text);
                 });
                 reader.on('end', () => {
+                    debug('[FIFO] Reader ended');
                     readerEnded = true;
                 });
                 reader.on('error', (error) => {
+                    debug(`[FIFO] Reader error: ${error.message}`);
                     if (!settled) {
                         settled = true;
                         reader.destroy();
@@ -252,35 +260,42 @@ async function executeCommand(command, separateOutputs = false) {
                 });
                 // Open the FIFO for writing after a small delay to ensure reader is ready
                 // This prevents the open call from blocking
+                debug('[FIFO] Scheduling writer open in 50ms');
                 setTimeout(() => {
                     let writeFd = null;
                     try {
+                        debug('[FIFO] Opening writer');
                         writeFd = openSync(fifoPath, 'w');
+                        debug(`[FIFO] Writer opened with fd ${writeFd}`);
                         // Unlink the FIFO immediately after both ends are open
                         // The file descriptors will continue to work until closed
                         // This is the ONLY place where the FIFO is unlinked - errors are not caught
+                        debug('[FIFO] Unlinking FIFO');
                         unlinkSync(fifoPath);
                         fifoUnlinked = true;
+                        debug('[FIFO] FIFO unlinked');
                         // Spawn with the same fd for both stdout and stderr
+                        debug(`[FIFO] Spawning child: ${executable} ${commandArgs.join(' ')}`);
                         const child = spawn(executable, commandArgs, {
                             stdio: ['inherit', writeFd, writeFd]
                         });
+                        debug(`[FIFO] Child spawned with PID ${child.pid}`);
                         // Set up signal handlers
                         setupSignalHandlers(child, () => {
-                            if (!settled) {
-                                settled = true;
-                                if (writeFd !== null) {
-                                    try {
-                                        closeSync(writeFd);
-                                    }
-                                    catch {
-                                        // Ignore close errors
-                                    }
+                            // Signal handler cleanup - only close write fd
+                            // Don't destroy reader here - let the main close handler do it
+                            if (writeFd !== null) {
+                                try {
+                                    closeSync(writeFd);
+                                    writeFd = null;
                                 }
-                                reader.destroy();
+                                catch (err) {
+                                    debug(`[FIFO] Error closing write fd in signal cleanup: ${err}`);
+                                }
                             }
                         });
                         child.on('error', (error) => {
+                            debug(`[FIFO] Child error: ${error.message}`);
                             if (!settled) {
                                 settled = true;
                                 if (writeFd !== null) {
@@ -296,21 +311,27 @@ async function executeCommand(command, separateOutputs = false) {
                             }
                         });
                         child.on('close', (code) => {
+                            debug(`[FIFO] Child closed with code ${code}`);
                             if (!settled) {
                                 settled = true;
                                 // Close the write fd first
                                 if (writeFd !== null) {
                                     try {
+                                        debug('[FIFO] Closing write fd');
                                         closeSync(writeFd);
                                         writeFd = null;
+                                        debug('[FIFO] Write fd closed');
                                     }
-                                    catch {
-                                        // Ignore close errors
+                                    catch (err) {
+                                        debug(`[FIFO] Error closing write fd: ${err}`);
                                     }
                                 }
                                 // Function to finalize and resolve
                                 const finalize = () => {
+                                    debug('[FIFO] Finalizing');
+                                    debug(`[FIFO] Combined output length: ${combinedOutput.length}`);
                                     reader.destroy();
+                                    debug('[FIFO] Resolving with output');
                                     resolve({
                                         stdout,
                                         stderr,
@@ -318,26 +339,41 @@ async function executeCommand(command, separateOutputs = false) {
                                         exitCode: code ?? 0
                                     });
                                 };
-                                // If reader has already ended, finalize immediately
-                                // Otherwise wait a bit for final data
+                                // Wait for reader to end naturally, or timeout after 200ms
+                                debug(`[FIFO] Reader ended status: ${readerEnded}`);
                                 if (readerEnded) {
                                     finalize();
                                 }
                                 else {
-                                    setTimeout(finalize, 50);
+                                    debug('[FIFO] Waiting for reader to end...');
+                                    let waited = 0;
+                                    const checkInterval = setInterval(() => {
+                                        waited += 10;
+                                        if (readerEnded) {
+                                            debug(`[FIFO] Reader ended after ${waited}ms`);
+                                            clearInterval(checkInterval);
+                                            finalize();
+                                        }
+                                        else if (waited >= 200) {
+                                            debug(`[FIFO] Reader did not end after ${waited}ms, finalizing anyway`);
+                                            clearInterval(checkInterval);
+                                            finalize();
+                                        }
+                                    }, 10);
                                 }
                             }
                         });
                     }
                     catch (error) {
+                        debug(`[FIFO] Error in setTimeout: ${error}`);
                         if (!settled) {
                             settled = true;
                             if (writeFd !== null) {
                                 try {
                                     closeSync(writeFd);
                                 }
-                                catch {
-                                    // Ignore close errors
+                                catch (err) {
+                                    debug(`[FIFO] Error closing write fd in catch: ${err}`);
                                 }
                             }
                             reader.destroy();
@@ -348,6 +384,7 @@ async function executeCommand(command, separateOutputs = false) {
                 }, 50);
             }
             catch (error) {
+                debug(`[FIFO] Error in outer try: ${error}`);
                 if (!settled) {
                     settled = true;
                     // Clean up FIFO only if it wasn't successfully unlinked
