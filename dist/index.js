@@ -1,5 +1,8 @@
 import { spawn } from 'child_process';
-import { appendFileSync } from 'fs';
+import { appendFileSync, createWriteStream, openSync, constants } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { randomBytes } from 'crypto';
 
 /**
  * Local implementations of GitHub Actions functions.
@@ -73,12 +76,12 @@ async function run() {
         // Execute the command and capture outputs
         const result = await executeCommand(command);
         // Set outputs for other workflow steps to use
-        setOutput('stdout', result.stdout);
-        setOutput('stderr', result.stderr);
+        setOutput('stdout_file', result.stdoutFile);
+        setOutput('stderr_file', result.stderrFile);
         setOutput('exit_code', result.exitCode.toString());
         // Check if the exit code should be treated as success
         if (!successExitCodes.has(result.exitCode)) {
-            setFailed(`Command exited with code ${result.exitCode}: ${result.stderr || result.stdout}`);
+            setFailed(`Command exited with code ${result.exitCode}`);
         }
     }
     catch (error) {
@@ -86,6 +89,43 @@ async function run() {
         if (error instanceof Error)
             setFailed(error.message);
     }
+}
+/**
+ * Create secure temporary output files for stdout and stderr.
+ * Files are created atomically with exclusive access in RUNNER_TEMP.
+ *
+ * @returns Object containing file paths and file descriptors for stdout and stderr.
+ */
+function createOutputFiles() {
+    // Get the temporary directory from RUNNER_TEMP environment variable
+    const tempDir = process.env.RUNNER_TEMP || tmpdir();
+    // Generate timestamp in seconds.nanoseconds format
+    const now = process.hrtime.bigint();
+    const seconds = now / BigInt(1_000_000_000);
+    const nanoseconds = now % BigInt(1_000_000_000);
+    const timestamp = `${seconds}.${nanoseconds.toString().padStart(9, '0')}`;
+    // Generate secure random suffix (16 bytes = 128 bits, base64url encoded)
+    const randomSuffix = randomBytes(16)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    // Create file base name
+    const baseName = `exec-${timestamp}-${randomSuffix}`;
+    // Create file paths
+    const stdoutPath = join(tempDir, `${baseName}.stdout`);
+    const stderrPath = join(tempDir, `${baseName}.stderr`);
+    // Open files with exclusive creation flags (O_CREAT | O_EXCL | O_WRONLY)
+    // This ensures atomic creation and prevents race conditions
+    // Using openSync here because createWriteStream will take ownership of the fd
+    const stdoutFd = openSync(stdoutPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+    const stderrFd = openSync(stderrPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+    return {
+        stdoutPath,
+        stderrPath,
+        stdoutFd,
+        stderrFd
+    };
 }
 /**
  * Parse the success exit codes input.
@@ -168,47 +208,80 @@ function setupSignalHandlers(child) {
     };
 }
 /**
- * Execute a command and capture its output.
+ * Execute a command and capture its output to files.
  *
  * @param command The command to execute.
- * @returns A promise that resolves with stdout, stderr, and exit code.
+ * @returns A promise that resolves with file paths and exit code.
  */
 async function executeCommand(command) {
+    // Parse command into executable and arguments
+    // Simple parsing that splits on whitespace while respecting quoted strings
+    const args = parseCommand(command);
+    if (args.length === 0) {
+        throw new Error('Command cannot be empty');
+    }
+    const executable = args[0];
+    const commandArgs = args.slice(1);
+    // Create output files
+    const { stdoutPath, stderrPath, stdoutFd, stderrFd } = createOutputFiles();
+    // Create write streams for the output files
+    // autoClose: true ensures the fd is closed when the stream ends
+    const stdoutFileStream = createWriteStream('', { fd: stdoutFd, autoClose: true });
+    const stderrFileStream = createWriteStream('', { fd: stderrFd, autoClose: true });
     return new Promise((resolve, reject) => {
-        // Parse command into executable and arguments
-        // Simple parsing that splits on whitespace while respecting quoted strings
-        const args = parseCommand(command);
-        if (args.length === 0) {
-            reject(new Error('Command cannot be empty'));
-            return;
-        }
-        const executable = args[0];
-        const commandArgs = args.slice(1);
         // Execute command directly without shell
         const child = spawn(executable, commandArgs, {
             stdio: ['inherit', 'pipe', 'pipe']
         });
-        let stdout = '';
-        let stderr = '';
         let settled = false;
-        // Capture and stream stdout
-        if (child.stdout) {
-            child.stdout.on('data', (data) => {
-                const text = data.toString();
-                stdout += text;
-                process.stdout.write(text);
-            });
-        }
-        // Capture and stream stderr
-        if (child.stderr) {
-            child.stderr.on('data', (data) => {
-                const text = data.toString();
-                stderr += text;
-                process.stderr.write(text);
-            });
-        }
+        let stdoutStreamFinished = !child.stdout; // If no stdout, mark as finished
+        let stderrStreamFinished = !child.stderr; // If no stderr, mark as finished
+        let childExitCode = null;
         // Set up signal forwarding
         const cleanupSignalHandlers = setupSignalHandlers(child);
+        // Function to check if all streams are done and resolve
+        const checkIfComplete = () => {
+            if (!settled &&
+                childExitCode !== null &&
+                stdoutStreamFinished &&
+                stderrStreamFinished) {
+                settled = true;
+                cleanupSignalHandlers();
+                resolve({
+                    stdoutFile: stdoutPath,
+                    stderrFile: stderrPath,
+                    exitCode: childExitCode
+                });
+            }
+        };
+        // Track when streams finish
+        stdoutFileStream.on('finish', () => {
+            stdoutStreamFinished = true;
+            checkIfComplete();
+        });
+        stderrFileStream.on('finish', () => {
+            stderrStreamFinished = true;
+            checkIfComplete();
+        });
+        // Pipe stdout to both file and process.stdout
+        // By default, stream.end() is called on the destination when source emits 'end'
+        if (child.stdout) {
+            child.stdout.pipe(stdoutFileStream);
+            child.stdout.pipe(process.stdout);
+        }
+        else {
+            // No stdout, manually end the stream
+            stdoutFileStream.end();
+        }
+        // Pipe stderr to both file and process.stderr
+        if (child.stderr) {
+            child.stderr.pipe(stderrFileStream);
+            child.stderr.pipe(process.stderr);
+        }
+        else {
+            // No stderr, manually end the stream
+            stderrFileStream.end();
+        }
         // Handle errors (e.g., command not found)
         child.on('error', (error) => {
             if (!settled) {
@@ -219,15 +292,8 @@ async function executeCommand(command) {
         });
         // Handle process exit
         child.on('close', (code) => {
-            if (!settled) {
-                settled = true;
-                cleanupSignalHandlers();
-                resolve({
-                    stdout,
-                    stderr,
-                    exitCode: code ?? 0
-                });
-            }
+            childExitCode = code ?? 0;
+            checkIfComplete();
         });
     });
 }

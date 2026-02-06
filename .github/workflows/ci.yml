@@ -63,8 +63,10 @@ jobs:
         id: output
         run: |
           echo "Exit Code: ${{ steps.test-action.outputs.exit_code }}"
-          echo "Stdout: ${{ steps.test-action.outputs.stdout }}"
-          echo "Stderr: ${{ steps.test-action.outputs.stderr }}"
+          echo "Stdout File: ${{ steps.test-action.outputs.stdout_file }}"
+          echo "Stderr File: ${{ steps.test-action.outputs.stderr_file }}"
+          echo "Stdout Content:"
+          cat "${{ steps.test-action.outputs.stdout_file }}"
 
       - name: Test Custom Success Exit Codes
         id: test-custom-exit
@@ -77,5 +79,5 @@ jobs:
         run: |
           echo "Custom exit code test passed!"
           echo "Exit Code: ${{ steps.test-custom-exit.outputs.exit_code }}"
-          echo "Stdout: ${{ steps.test-custom-exit.outputs.stdout }}"
-          echo "Stderr: ${{ steps.test-custom-exit.outputs.stderr }}"
+          echo "Stdout File: ${{ steps.test-custom-exit.outputs.stdout_file }}"
+          echo "Stderr File: ${{ steps.test-custom-exit.outputs.stderr_file }}"
