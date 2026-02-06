@@ -98,14 +98,18 @@ Linting errors prevent pull requests from being merged and **MUST** be fixed
 before committing. Always run the appropriate linters and fix all linting
 errors.
 
+**CRITICAL: Before making ANY commit that includes changes to Markdown (`.md`)
+or shell script files, you MUST run the super-linter as described below. This is
+mandatory for EVERY commit, not just PR updates.**
+
 - **For TypeScript/JavaScript code changes**: Run `npm run lint` to check for
   linting errors. Always run `npm install` before running `npm run lint`.
-- **For Markdown file changes**: Run the super-linter Docker image as described
-  below.
+- **For Markdown or shell script file changes**: Run the super-linter Docker
+  image as described below. This must be done before EVERY commit that includes
+  such changes.
 
-**Before updating any pull request**, if there are changes to Markdown files
-between the base branch and current state, run the super-linter Docker image
-exactly as the CI workflow does:
+**Super-Linter Command** - Run this command exactly as shown before committing
+any Markdown or shell script changes:
 
 ```bash
 docker run --rm \
@@ -143,6 +147,54 @@ GitHub Actions are versioned using branch and tag names. Please ensure the
 version in the project's `package.json` is updated to reflect the changes made
 in the codebase. The version should follow
 [Semantic Versioning](https://semver.org/) principles.
+
+### Node.js Version Consistency
+
+This action runs in the GitHub Actions runtime specified in `action.yml` (the
+`runs.using` field). All Node.js version specifications and constraints
+throughout the repository must be kept in sync with this runtime version.
+
+**Source of Truth**: The `runs.using` field in `action.yml` (e.g., `nodeXX`) is
+the ultimate source of truth for the Node.js major version.
+
+**Agent Version Verification**: When starting work on this repository, agents
+(including Copilot) must verify they are using the correct Node.js major
+version:
+
+1. Check the expected major version: `grep -oP 'using:\s*node\K\d+' action.yml`
+1. Check your current Node.js version: `node --version`
+1. Verify the major versions match. If they don't, this is a critical error that
+   must be reported to the user immediately.
+
+Example verification:
+
+```bash
+EXPECTED=$(grep -oP 'using:\s*node\K\d+' action.yml)
+ACTUAL=$(node --version | grep -oP 'v\K\d+')
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  echo "ERROR: Node.js version mismatch! Expected v$EXPECTED but using v$ACTUAL"
+  exit 1
+fi
+```
+
+**Files that must stay aligned**:
+
+- `.node-version` - Should specify the major version to use the latest LTS
+- `.devcontainer/devcontainer.json` - The base image must use the same major
+  version
+- `package.json` - The `engines.node` field should have a minimum constraint
+  matching the major version but no maximum constraint
+- `@types/node` - Must use the same major version as the runtime
+- `.github/dependabot.yml` - Must be configured to ignore major version upgrades
+  of `@types/node` beyond the current runtime version
+
+**Important**: Do not specify exact versions or maximum version constraints for
+the Node.js engine or `@types/node` in `package.json`, as we don't control the
+exact minor/patch version used by the GitHub Actions runtime. We want to use the
+latest/default version of the major version.
+
+When making changes to Node.js version specifications, ensure ALL files are
+updated together to maintain consistency across the repository.
 
 ## Pull Request Guidelines
 

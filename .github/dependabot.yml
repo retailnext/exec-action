@@ -14,6 +14,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Ignore @types/node major version upgrades beyond current runtime
+      # The major version must stay aligned with the node runtime in action.yml
+      - dependency-name: '@types/node'
+        update-types:
+          - version-update:semver-major
     groups:
       npm-development:
         dependency-type: development
