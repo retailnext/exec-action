@@ -65,6 +65,40 @@ command to bundle the TypeScript code into JavaScript:
 npm run bundle
 ```
 
+## Coverage Badge
+
+**CRITICAL: Before making ANY commit that includes code changes (changes to
+files in the `src` directory), you MUST ensure the coverage badge is up to date.
+This is mandatory for EVERY commit that includes code changes.**
+
+The coverage badge in `badges/coverage.svg` must accurately reflect the current
+test coverage. The CI workflow includes a check that will fail if the coverage
+badge is out of date, making the PR unmergeable.
+
+### Updating the Coverage Badge
+
+After making code changes and running tests:
+
+1. Run `npm run coverage` to update the coverage badge
+2. Verify the badge is correct by running
+   `npx tsx script/check-coverage-badge.ts`
+3. Commit the updated badge along with your code changes
+
+### Checking Coverage Badge Accuracy
+
+To verify the coverage badge is up to date:
+
+```bash
+npx tsx script/check-coverage-badge.ts
+```
+
+This script compares the coverage percentage in `badges/coverage.svg` with the
+actual coverage from `coverage/coverage-summary.json`. If they don't match, the
+script will fail with an error message.
+
+The `npm run ci-test` script automatically runs this check, so PRs with
+inaccurate coverage badges will fail CI and be unmergeable.
+
 ## General Coding Guidelines
 
 - Follow standard TypeScript and JavaScript coding conventions and best
