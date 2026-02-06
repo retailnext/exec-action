@@ -365,8 +365,8 @@ describe('main.ts', () => {
       }
     }, 15000)
 
-    it.skip(`rejects when command not found`, async () => {
-      // Skip: This test is flaky - command spawn error handling varies by environment
+    it(`rejects when command not found`, async () => {
+      // Test that error event is properly handled when spawning non-existent command
       await expect(
         executeCommand('command_that_definitely_does_not_exist_xyz123', separateOutputs)
       ).rejects.toThrow()
