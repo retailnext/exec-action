@@ -289,89 +289,117 @@ describe('main.ts', () => {
     })
   })
 
-  // Matrix-based testing for both output modes
-  describe.each([
-    { mode: 'combined', separateOutputs: false },
-    { mode: 'separate', separateOutputs: true }
-  ])('executeCommand in $mode mode', ({ mode, separateOutputs }) => {
-    it(`captures output correctly`, async () => {
+  // Test combined output mode
+  describe('executeCommand in combined mode', () => {
+    const separateOutputs = false
+
+    it('captures output correctly', async () => {
       const result = await executeCommand('echo "test output"', separateOutputs)
       expect(result.exitCode).toBe(0)
-
-      if (separateOutputs) {
-        expect(result.stdout).toContain('test output')
-        expect(result.stderr).toBe('')
-        expect(result.combinedOutput).toBe('')
-      } else {
-        expect(result.combinedOutput).toContain('test output')
-        expect(result.stdout).toBe('')
-        expect(result.stderr).toBe('')
-      }
+      expect(result.combinedOutput).toContain('test output')
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toBe('')
     }, 15000)
 
-    it(`captures both stdout and stderr`, async () => {
+    it('captures both stdout and stderr', async () => {
       const result = await executeCommand(
         'sh -c "echo out; echo err >&2"',
         separateOutputs
       )
       expect(result.exitCode).toBe(0)
-
-      if (separateOutputs) {
-        expect(result.stdout).toContain('out')
-        expect(result.stderr).toContain('err')
-      } else {
-        expect(result.combinedOutput).toContain('out')
-        expect(result.combinedOutput).toContain('err')
-      }
+      expect(result.combinedOutput).toContain('out')
+      expect(result.combinedOutput).toContain('err')
     }, 15000)
 
-    it(`handles command failure`, async () => {
+    it('handles command failure', async () => {
       const result = await executeCommand('sh -c "exit 42"', separateOutputs)
       expect(result.exitCode).toBe(42)
     }, 20000)
 
-    it(`handles multi-line output`, async () => {
+    it('handles multi-line output', async () => {
       const result = await executeCommand(
         'sh -c "echo line1; echo line2; echo line3"',
         separateOutputs
       )
       expect(result.exitCode).toBe(0)
-
-      if (separateOutputs) {
-        expect(result.stdout).toContain('line1')
-        expect(result.stdout).toContain('line2')
-        expect(result.stdout).toContain('line3')
-      } else {
-        expect(result.combinedOutput).toContain('line1')
-        expect(result.combinedOutput).toContain('line2')
-        expect(result.combinedOutput).toContain('line3')
-      }
+      expect(result.combinedOutput).toContain('line1')
+      expect(result.combinedOutput).toContain('line2')
+      expect(result.combinedOutput).toContain('line3')
     }, 15000)
 
-    it(`works with commands in PATH`, async () => {
+    it('works with commands in PATH', async () => {
       const result = await executeCommand('ls -la', separateOutputs)
       expect(result.exitCode).toBe(0)
-
-      if (separateOutputs) {
-        expect(result.stdout.length).toBeGreaterThan(0)
-      } else {
-        expect(result.combinedOutput.length).toBeGreaterThan(0)
-      }
+      expect(result.combinedOutput.length).toBeGreaterThan(0)
     }, 15000)
 
-    it(`works with npm commands`, async () => {
+    it('works with npm commands', async () => {
       const result = await executeCommand('npm --version', separateOutputs)
       expect(result.exitCode).toBe(0)
-
-      if (separateOutputs) {
-        expect(result.stdout.length).toBeGreaterThan(0)
-      } else {
-        expect(result.combinedOutput.length).toBeGreaterThan(0)
-      }
+      expect(result.combinedOutput.length).toBeGreaterThan(0)
     }, 15000)
 
-    it(`rejects when command not found`, async () => {
-      // Test that error event is properly handled when spawning non-existent command
+    it('rejects when command not found', async () => {
+      await expect(
+        executeCommand(
+          'command_that_definitely_does_not_exist_xyz123',
+          separateOutputs
+        )
+      ).rejects.toThrow()
+    })
+  })
+
+  // Test separate output mode
+  describe('executeCommand in separate mode', () => {
+    const separateOutputs = true
+
+    it('captures output correctly', async () => {
+      const result = await executeCommand('echo "test output"', separateOutputs)
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('test output')
+      expect(result.stderr).toBe('')
+      expect(result.combinedOutput).toBe('')
+    }, 15000)
+
+    it('captures both stdout and stderr', async () => {
+      const result = await executeCommand(
+        'sh -c "echo out; echo err >&2"',
+        separateOutputs
+      )
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('out')
+      expect(result.stderr).toContain('err')
+    }, 15000)
+
+    it('handles command failure', async () => {
+      const result = await executeCommand('sh -c "exit 42"', separateOutputs)
+      expect(result.exitCode).toBe(42)
+    }, 20000)
+
+    it('handles multi-line output', async () => {
+      const result = await executeCommand(
+        'sh -c "echo line1; echo line2; echo line3"',
+        separateOutputs
+      )
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('line1')
+      expect(result.stdout).toContain('line2')
+      expect(result.stdout).toContain('line3')
+    }, 15000)
+
+    it('works with commands in PATH', async () => {
+      const result = await executeCommand('ls -la', separateOutputs)
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.length).toBeGreaterThan(0)
+    }, 15000)
+
+    it('works with npm commands', async () => {
+      const result = await executeCommand('npm --version', separateOutputs)
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.length).toBeGreaterThan(0)
+    }, 15000)
+
+    it('rejects when command not found', async () => {
       await expect(
         executeCommand(
           'command_that_definitely_does_not_exist_xyz123',

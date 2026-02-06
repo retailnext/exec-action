@@ -48,6 +48,7 @@ npm install
 
 This ensures that all required packages (jest, typescript, etc.) are available
 and tests can run properly. Dependencies must be installed before:
+
 - Running tests
 - Running linters
 - Building/bundling code
@@ -69,6 +70,9 @@ dependencies are available.
 
 ## Linting and Formatting
 
+**CRITICAL**: Lint errors will prevent a pull request from being merged. They
+MUST always be checked for and MUST always be fixed before committing.
+
 **ALWAYS** run linting and formatting checks after making any code changes and
 before bundling or committing:
 
@@ -76,6 +80,9 @@ before bundling or committing:
 npm run lint
 npm run format:check
 ```
+
+**If there are ANY lint errors, you MUST fix them before proceeding.** The CI
+pipeline will fail and the PR cannot be merged if lint errors are present.
 
 If there are formatting issues, fix them with:
 
