@@ -289,7 +289,6 @@ describe('main.ts', () => {
     })
   })
 
-
   // Matrix-based testing for both output modes
   describe.each([
     { mode: 'combined', separateOutputs: false },
@@ -298,7 +297,7 @@ describe('main.ts', () => {
     it(`captures output correctly`, async () => {
       const result = await executeCommand('echo "test output"', separateOutputs)
       expect(result.exitCode).toBe(0)
-      
+
       if (separateOutputs) {
         expect(result.stdout).toContain('test output')
         expect(result.stderr).toBe('')
@@ -311,9 +310,12 @@ describe('main.ts', () => {
     }, 15000)
 
     it(`captures both stdout and stderr`, async () => {
-      const result = await executeCommand('sh -c "echo out; echo err >&2"', separateOutputs)
+      const result = await executeCommand(
+        'sh -c "echo out; echo err >&2"',
+        separateOutputs
+      )
       expect(result.exitCode).toBe(0)
-      
+
       if (separateOutputs) {
         expect(result.stdout).toContain('out')
         expect(result.stderr).toContain('err')
@@ -329,9 +331,12 @@ describe('main.ts', () => {
     }, 20000)
 
     it(`handles multi-line output`, async () => {
-      const result = await executeCommand('sh -c "echo line1; echo line2; echo line3"', separateOutputs)
+      const result = await executeCommand(
+        'sh -c "echo line1; echo line2; echo line3"',
+        separateOutputs
+      )
       expect(result.exitCode).toBe(0)
-      
+
       if (separateOutputs) {
         expect(result.stdout).toContain('line1')
         expect(result.stdout).toContain('line2')
@@ -346,7 +351,7 @@ describe('main.ts', () => {
     it(`works with commands in PATH`, async () => {
       const result = await executeCommand('ls -la', separateOutputs)
       expect(result.exitCode).toBe(0)
-      
+
       if (separateOutputs) {
         expect(result.stdout.length).toBeGreaterThan(0)
       } else {
@@ -357,7 +362,7 @@ describe('main.ts', () => {
     it(`works with npm commands`, async () => {
       const result = await executeCommand('npm --version', separateOutputs)
       expect(result.exitCode).toBe(0)
-      
+
       if (separateOutputs) {
         expect(result.stdout.length).toBeGreaterThan(0)
       } else {
@@ -368,15 +373,22 @@ describe('main.ts', () => {
     it(`rejects when command not found`, async () => {
       // Test that error event is properly handled when spawning non-existent command
       await expect(
-        executeCommand('command_that_definitely_does_not_exist_xyz123', separateOutputs)
+        executeCommand(
+          'command_that_definitely_does_not_exist_xyz123',
+          separateOutputs
+        )
       ).rejects.toThrow()
     })
   })
 
   describe('Error Handling and Edge Cases', () => {
     it('Rejects with error for empty command', async () => {
-      await expect(executeCommand('', false)).rejects.toThrow('Command cannot be empty')
-      await expect(executeCommand('   ', false)).rejects.toThrow('Command cannot be empty')
+      await expect(executeCommand('', false)).rejects.toThrow(
+        'Command cannot be empty'
+      )
+      await expect(executeCommand('   ', false)).rejects.toThrow(
+        'Command cannot be empty'
+      )
     })
 
     it('Handles commands with only whitespace output', async () => {
@@ -395,7 +407,7 @@ describe('main.ts', () => {
     it('Throws error for range with negative start', () => {
       expect(() => parseSuccessExitCodes('0--1')).toThrow()
     })
-    
+
     it('Throws error when range start is negative', () => {
       expect(() => parseSuccessExitCodes('-5-10')).toThrow()
     })

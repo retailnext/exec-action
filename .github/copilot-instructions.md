@@ -39,11 +39,19 @@ it is generated from.
 
 ## Environment Setup
 
-Install dependencies by running:
+**CRITICAL**: Before running any tests or making code changes, always install
+dependencies first:
 
 ```bash
 npm install
 ```
+
+This ensures that all required packages (jest, typescript, etc.) are available
+and tests can run properly. Dependencies must be installed before:
+- Running tests
+- Running linters
+- Building/bundling code
+- Making any code changes
 
 ## Testing
 
@@ -55,6 +63,9 @@ npm run test
 
 Unit tests should exist in the `__tests__` directory. They are powered by
 `jest`. Fixtures should be placed in the `__fixtures__` directory.
+
+**Important**: Always run `npm install` before running tests to ensure all test
+dependencies are available.
 
 ## Linting and Formatting
 

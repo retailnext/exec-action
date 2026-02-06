@@ -176,19 +176,8 @@ export async function executeCommand(
         })
       }
 
-      // Forward signals and handle process lifecycle
-      setupSignalHandlers(child, () => {
-        if (!settled) {
-          settled = true
-          resolve({
-            stdout,
-            stderr,
-            combinedOutput,
-            exitCode: 0
-          })
-        }
-      })
-
+      // Register error handler BEFORE setupSignalHandlers to avoid race condition
+      // where setupSignalHandlers' error handler resolves instead of rejecting
       child.on('error', (error: Error) => {
         if (!settled) {
           settled = true
@@ -204,6 +193,20 @@ export async function executeCommand(
             stderr,
             combinedOutput,
             exitCode: code ?? 0
+          })
+        }
+      })
+
+      // Forward signals and handle process lifecycle
+      // This is registered AFTER error/close handlers to ensure proper event ordering
+      setupSignalHandlers(child, () => {
+        if (!settled) {
+          settled = true
+          resolve({
+            stdout,
+            stderr,
+            combinedOutput,
+            exitCode: 0
           })
         }
       })
