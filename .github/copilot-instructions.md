@@ -56,6 +56,25 @@ npm run test
 Unit tests should exist in the `__tests__` directory. They are powered by
 `jest`. Fixtures should be placed in the `__fixtures__` directory.
 
+## Linting and Formatting
+
+**ALWAYS** run linting and formatting checks after making any code changes and
+before bundling or committing:
+
+```bash
+npm run lint
+npm run format:check
+```
+
+If there are formatting issues, fix them with:
+
+```bash
+npm run format:write
+```
+
+If there are linting errors, fix them before proceeding. Do not commit code with
+linting errors.
+
 ## Bundling
 
 Any time files in the `src` directory are changed, you should run the following
@@ -64,6 +83,8 @@ command to bundle the TypeScript code into JavaScript:
 ```bash
 npm run bundle
 ```
+
+**Important**: Always run linting checks before bundling to catch errors early.
 
 ## General Coding Guidelines
 
@@ -81,6 +102,8 @@ npm run bundle
 - Use JSDoc comments to document functions, classes, and complex logic
 - After doing any refactoring, ensure to run `npm run test` to ensure that all
   tests still pass and coverage requirements are met
+- **ALWAYS run `npm run lint` after making code changes** to catch errors before
+  committing
 - When suggesting code changes, always opt for the most maintainable approach.
   Try your best to keep the code clean and follow "Don't Repeat Yourself" (DRY)
   principles
@@ -105,13 +128,17 @@ When creating a pull request (PR), please ensure that:
 
 - Keep changes focused and minimal (avoid large changes, or consider breaking
   them into separate, smaller PRs)
-- Formatting checks pass
-- Linting checks pass
+- **Linting checks pass** - Run `npm run lint` and fix all errors
+- **Formatting checks pass** - Run `npm run format:check` or
+  `npm run format:write`
 - Unit tests pass and coverage requirements are met
 - The action has been transpiled to JavaScript and the `dist` directory is
   up-to-date with the latest changes in the `src` directory
 - If necessary, the `README.md` file is updated to reflect any changes in
   functionality or usage
+- If changes affect signal handling or output behavior, ensure the
+  `.github/workflows/signal-test.yml` workflow is updated to test with the
+  correct output format (e.g., `combined_output` vs `stdout`/`stderr`)
 
 The body of the PR should include:
 

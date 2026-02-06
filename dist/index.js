@@ -273,7 +273,7 @@ async function executeCommand(command, separateOutputs = false) {
                                     try {
                                         closeSync(writeFd);
                                     }
-                                    catch (e) {
+                                    catch {
                                         // Ignore close errors
                                     }
                                 }
@@ -287,7 +287,7 @@ async function executeCommand(command, separateOutputs = false) {
                                     try {
                                         closeSync(writeFd);
                                     }
-                                    catch (e) {
+                                    catch {
                                         // Ignore close errors
                                     }
                                 }
@@ -304,7 +304,7 @@ async function executeCommand(command, separateOutputs = false) {
                                         closeSync(writeFd);
                                         writeFd = null;
                                     }
-                                    catch (e) {
+                                    catch {
                                         // Ignore close errors
                                     }
                                 }
@@ -336,7 +336,7 @@ async function executeCommand(command, separateOutputs = false) {
                                 try {
                                     closeSync(writeFd);
                                 }
-                                catch (e) {
+                                catch {
                                     // Ignore close errors
                                 }
                             }
