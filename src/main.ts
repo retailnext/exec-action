@@ -105,6 +105,42 @@ export function parseSuccessExitCodes(input: string): Set<number> {
 }
 
 /**
+ * Set up signal handlers to forward signals to the child process.
+ *
+ * @param child The child process to forward signals to.
+ * @returns A cleanup function to remove the signal handlers.
+ */
+function setupSignalHandlers(child: ReturnType<typeof spawn>): () => void {
+  const signals: NodeJS.Signals[] = [
+    'SIGINT',
+    'SIGTERM',
+    'SIGQUIT',
+    'SIGHUP',
+    'SIGPIPE',
+    'SIGABRT'
+  ]
+
+  // Create individual signal handlers for proper cleanup
+  const signalHandlers = new Map<NodeJS.Signals, () => void>()
+  for (const signal of signals) {
+    const handler = () => {
+      core.debug(`Received ${signal}, forwarding to child process`)
+      child.kill(signal)
+    }
+    signalHandlers.set(signal, handler)
+    process.on(signal, handler)
+  }
+
+  // Return cleanup function
+  return () => {
+    for (const [signal, handler] of signalHandlers) {
+      process.removeListener(signal, handler)
+    }
+    signalHandlers.clear()
+  }
+}
+
+/**
  * Execute a command and capture its output.
  *
  * @param command The command to execute.
@@ -154,34 +190,8 @@ export async function executeCommand(command: string): Promise<{
       })
     }
 
-    // Forward signals to the child process
-    const signals: NodeJS.Signals[] = [
-      'SIGINT',
-      'SIGTERM',
-      'SIGQUIT',
-      'SIGHUP',
-      'SIGPIPE',
-      'SIGABRT'
-    ]
-
-    // Create individual signal handlers for proper cleanup
-    const signalHandlers = new Map<NodeJS.Signals, () => void>()
-    for (const signal of signals) {
-      const handler = () => {
-        core.debug(`Received ${signal}, forwarding to child process`)
-        child.kill(signal)
-      }
-      signalHandlers.set(signal, handler)
-      process.on(signal, handler)
-    }
-
-    // Clean up signal handlers when child closes
-    const cleanupSignalHandlers = () => {
-      for (const [signal, handler] of signalHandlers) {
-        process.removeListener(signal, handler)
-      }
-      signalHandlers.clear()
-    }
+    // Set up signal forwarding
+    const cleanupSignalHandlers = setupSignalHandlers(child)
 
     // Handle errors (e.g., command not found)
     child.on('error', (error: Error) => {
