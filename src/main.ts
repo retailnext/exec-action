@@ -216,6 +216,8 @@ export async function executeCommand(
         `exec-action-${Date.now()}-${Math.random().toString(36).slice(2)}.fifo`
       )
 
+      let fifoUnlinked = false
+
       try {
         // Create a FIFO (named pipe)
         execSync(`mkfifo "${fifoPath}"`)
@@ -240,11 +242,7 @@ export async function executeCommand(
           if (!settled) {
             settled = true
             reader.destroy()
-            try {
-              unlinkSync(fifoPath)
-            } catch (e) {
-              // Ignore cleanup errors
-            }
+            // FIFO will be either already unlinked or cleaned up by outer catch
             reject(error)
           }
         })
@@ -259,11 +257,9 @@ export async function executeCommand(
 
             // Unlink the FIFO immediately after both ends are open
             // The file descriptors will continue to work until closed
-            try {
-              unlinkSync(fifoPath)
-            } catch (e) {
-              // Ignore if already unlinked
-            }
+            // This is the ONLY place where the FIFO is unlinked - errors are not caught
+            unlinkSync(fifoPath)
+            fifoUnlinked = true
 
             // Spawn with the same fd for both stdout and stderr
             const child = spawn(executable, commandArgs, {
@@ -345,11 +341,7 @@ export async function executeCommand(
                 }
               }
               reader.destroy()
-              try {
-                unlinkSync(fifoPath)
-              } catch (e) {
-                // Ignore cleanup errors
-              }
+              // FIFO already unlinked
               reject(error instanceof Error ? error : new Error(String(error)))
             }
           }
@@ -357,10 +349,9 @@ export async function executeCommand(
       } catch (error) {
         if (!settled) {
           settled = true
-          try {
+          // Clean up FIFO only if it wasn't successfully unlinked
+          if (!fifoUnlinked) {
             unlinkSync(fifoPath)
-          } catch (e) {
-            // Ignore cleanup errors
           }
           reject(
             error instanceof Error
