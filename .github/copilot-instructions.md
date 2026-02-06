@@ -46,7 +46,7 @@ dependencies first:
 npm install
 ```
 
-This ensures that all required packages (jest, typescript, etc.) are available
+This ensures that all required packages (Jest, TypeScript, etc.) are available
 and tests can run properly. Dependencies must be installed before:
 
 - Running tests
@@ -62,8 +62,8 @@ Ensure all unit tests pass by running:
 npm run test
 ```
 
-Unit tests should exist in the `__tests__` directory. They are powered by
-`jest`. Fixtures should be placed in the `__fixtures__` directory.
+Unit tests should exist in the `__tests__` directory. They are powered by Jest.
+Fixtures should be placed in the `__fixtures__` directory.
 
 **Important**: Always run `npm install` before running tests to ensure all test
 dependencies are available.
@@ -92,6 +92,42 @@ npm run format:write
 
 If there are linting errors, fix them before proceeding. Do not commit code with
 linting errors.
+
+### Super-Linter for Markdown and Shell Files
+
+**Before updating any pull request**, if there are changes to Markdown or shell
+files between the base branch and current state, run the super-linter Docker
+image exactly as the CI workflow does:
+
+```bash
+docker run --rm \
+  -e RUN_LOCAL=true \
+  -e USE_FIND_ALGORITHM=true \
+  -e CHECKOV_FILE_NAME=.checkov.yml \
+  -e FILTER_REGEX_EXCLUDE="dist/**/*" \
+  -e LINTER_RULES_PATH=. \
+  -e VALIDATE_ALL_CODEBASE=true \
+  -e VALIDATE_BIOME_FORMAT=false \
+  -e VALIDATE_BIOME_LINT=false \
+  -e VALIDATE_GITHUB_ACTIONS_ZIZMOR=false \
+  -e VALIDATE_JAVASCRIPT_ES=false \
+  -e VALIDATE_JSCPD=false \
+  -e VALIDATE_TYPESCRIPT_ES=false \
+  -e VALIDATE_JSON=false \
+  -v "$(pwd)":/tmp/lint:ro \
+  --workdir=/tmp/lint \
+  ghcr.io/super-linter/super-linter:slim-v8
+```
+
+This command uses all environment variables from the linter workflow
+(`.github/workflows/linter.yml`) except `GITHUB_TOKEN` (not needed for local
+runs) and `DEFAULT_BRANCH` (not compatible with `USE_FIND_ALGORITHM=true`). The
+`RUN_LOCAL=true` flag enables local execution mode. This ensures linting is
+performed using the same versions and configurations as CI.
+
+**Important:** Always check this command against `.github/workflows/linter.yml`
+and update it whenever there are changes to the linter workflow to ensure it
+stays synchronized with the CI configuration.
 
 ## Bundling
 

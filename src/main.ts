@@ -1,8 +1,8 @@
-import { spawn, execSync } from 'child_process'
+import { spawn } from 'child_process'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { unlinkSync, createReadStream, openSync, closeSync } from 'fs'
 import * as core from './github-actions.js'
+import { FifoPipe } from './fifo-stream.js'
 
 /**
  * The main function for the action.
@@ -149,7 +149,7 @@ export async function executeCommand(
 
     let stdout = ''
     let stderr = ''
-    let combinedOutput = ''
+    const combinedOutput = ''
     let settled = false
 
     if (separateOutputs) {
@@ -211,205 +211,86 @@ export async function executeCommand(
         }
       })
     } else {
-      // Combined mode: create a FIFO (named pipe) and pass it to both stdout and stderr
-      // Note: Node.js doesn't expose pipe() syscall for anonymous pipes,
-      // so we use mkfifo to create a named pipe which provides the same behavior
+      // Combined mode: Use FIFO-based stream to pass same fd to both stdout and stderr
       const fifoPath = join(
         tmpdir(),
         `exec-action-${Date.now()}-${Math.random().toString(36).slice(2)}.fifo`
       )
 
-      let fifoUnlinked = false
+      core.debug(`[Combined Mode] Using FIFO at ${fifoPath}`)
 
-      core.debug(`[FIFO] Creating FIFO at ${fifoPath}`)
+      const fifoPipe = new FifoPipe(fifoPath)
 
-      try {
-        // Create a FIFO (named pipe)
-        execSync(`mkfifo "${fifoPath}"`)
-        core.debug('[FIFO] FIFO created successfully')
+      // Open the FIFO and handle the process
+      fifoPipe
+        .open()
+        .then((writeFd) => {
+          core.debug(`[Combined Mode] FIFO opened with fd ${writeFd}`)
 
-        // Track if reader has ended
-        let readerEnded = false
-
-        // Open the FIFO for reading (non-blocking)
-        core.debug('[FIFO] Opening reader')
-        const reader = createReadStream(fifoPath, { flags: 'r' })
-        core.debug('[FIFO] Reader opened')
-
-        reader.on('data', (data: Buffer) => {
-          const text = data.toString()
-          core.debug(`[FIFO] Received data: ${text.length} bytes`)
-          combinedOutput += text
+          // Spawn with the same fd for both stdout and stderr
           core.debug(
-            `[FIFO] combinedOutput is now: ${combinedOutput.length} bytes`
+            `[Combined Mode] Spawning child: ${executable} ${commandArgs.join(' ')}`
           )
-          process.stdout.write(text)
-        })
+          const child = spawn(executable, commandArgs, {
+            stdio: ['inherit', writeFd, writeFd]
+          })
+          core.debug(`[Combined Mode] Child spawned with PID ${child.pid}`)
 
-        reader.on('end', () => {
-          core.debug('[FIFO] Reader ended')
-          readerEnded = true
-        })
+          // Set up signal handlers
+          setupSignalHandlers(child, () => {
+            // Signal handler cleanup - close write fd only
+            fifoPipe.closeWriteFd()
+          })
 
-        reader.on('error', (error: Error) => {
-          core.debug(`[FIFO] Reader error: ${error.message}`)
-          if (!settled) {
-            settled = true
-            reader.destroy()
-            // FIFO will be either already unlinked or cleaned up by outer catch
-            reject(error)
-          }
-        })
+          // Register error handler BEFORE setupSignalHandlers to avoid race condition
+          child.on('error', (error: Error) => {
+            core.debug(`[Combined Mode] Child error: ${error.message}`)
+            if (!settled) {
+              settled = true
+              fifoPipe.close()
+              reject(error)
+            }
+          })
 
-        // Open the FIFO for writing after a small delay to ensure reader is ready
-        // This prevents the open call from blocking
-        core.debug('[FIFO] Scheduling writer open in 50ms')
-        setTimeout(() => {
-          let writeFd: number | null = null
+          child.on('close', (code: number | null) => {
+            core.debug(`[Combined Mode] Child closed with code ${code}`)
+            if (!settled) {
+              settled = true
 
-          try {
-            core.debug('[FIFO] Opening writer')
-            writeFd = openSync(fifoPath, 'w')
-            core.debug(`[FIFO] Writer opened with fd ${writeFd}`)
+              // Wait for all data to be received
+              fifoPipe
+                .waitForCompletion()
+                .then(() => {
+                  // Get the output and close
+                  const combinedOutput = fifoPipe.getOutput()
+                  fifoPipe.close()
 
-            // Unlink the FIFO immediately after both ends are open
-            // The file descriptors will continue to work until closed
-            // This is the ONLY place where the FIFO is unlinked - errors are not caught
-            core.debug('[FIFO] Unlinking FIFO')
-            unlinkSync(fifoPath)
-            fifoUnlinked = true
-            core.debug('[FIFO] FIFO unlinked')
-
-            // Spawn with the same fd for both stdout and stderr
-            core.debug(
-              `[FIFO] Spawning child: ${executable} ${commandArgs.join(' ')}`
-            )
-            const child = spawn(executable, commandArgs, {
-              stdio: ['inherit', writeFd, writeFd]
-            })
-            core.debug(`[FIFO] Child spawned with PID ${child.pid}`)
-
-            // Set up signal handlers
-            setupSignalHandlers(child, () => {
-              // Signal handler cleanup - only close write fd
-              // Don't destroy reader here - let the main close handler do it
-              if (writeFd !== null) {
-                try {
-                  closeSync(writeFd)
-                  writeFd = null
-                } catch (err) {
-                  core.debug(
-                    `[FIFO] Error closing write fd in signal cleanup: ${err}`
-                  )
-                }
-              }
-            })
-
-            child.on('error', (error: Error) => {
-              core.debug(`[FIFO] Child error: ${error.message}`)
-              if (!settled) {
-                settled = true
-                if (writeFd !== null) {
-                  try {
-                    closeSync(writeFd)
-                  } catch {
-                    // Ignore close errors
-                  }
-                }
-                reader.destroy()
-                reject(error)
-              }
-            })
-
-            child.on('close', (code: number | null) => {
-              core.debug(`[FIFO] Child closed with code ${code}`)
-              if (!settled) {
-                settled = true
-
-                // Close the write fd first
-                if (writeFd !== null) {
-                  try {
-                    core.debug('[FIFO] Closing write fd')
-                    closeSync(writeFd)
-                    writeFd = null
-                    core.debug('[FIFO] Write fd closed')
-                  } catch (err) {
-                    core.debug(`[FIFO] Error closing write fd: ${err}`)
-                  }
-                }
-
-                // Function to finalize and resolve
-                const finalize = () => {
-                  core.debug('[FIFO] Finalizing')
-                  core.debug(
-                    `[FIFO] Combined output length: ${combinedOutput.length}`
-                  )
-                  reader.destroy()
-                  core.debug('[FIFO] Resolving with output')
+                  core.debug('[Combined Mode] Resolving with output')
                   resolve({
-                    stdout,
-                    stderr,
+                    stdout: '',
+                    stderr: '',
                     combinedOutput,
                     exitCode: code ?? 0
                   })
-                }
-
-                // Wait for reader to end naturally, or timeout after 200ms
-                core.debug(`[FIFO] Reader ended status: ${readerEnded}`)
-                if (readerEnded) {
-                  finalize()
-                } else {
-                  core.debug('[FIFO] Waiting for reader to end...')
-                  let waited = 0
-                  const checkInterval = setInterval(() => {
-                    waited += 10
-                    if (readerEnded) {
-                      core.debug(`[FIFO] Reader ended after ${waited}ms`)
-                      clearInterval(checkInterval)
-                      finalize()
-                    } else if (waited >= 200) {
-                      core.debug(
-                        `[FIFO] Reader did not end after ${waited}ms, finalizing anyway`
-                      )
-                      clearInterval(checkInterval)
-                      finalize()
-                    }
-                  }, 10)
-                }
-              }
-            })
-          } catch (error) {
-            core.debug(`[FIFO] Error in setTimeout: ${error}`)
-            if (!settled) {
-              settled = true
-              if (writeFd !== null) {
-                try {
-                  closeSync(writeFd)
-                } catch (err) {
-                  core.debug(`[FIFO] Error closing write fd in catch: ${err}`)
-                }
-              }
-              reader.destroy()
-              // FIFO already unlinked
-              reject(error instanceof Error ? error : new Error(String(error)))
+                })
+                .catch((err) => {
+                  core.debug(
+                    `[Combined Mode] Error in waitForCompletion: ${err}`
+                  )
+                  fifoPipe.close()
+                  reject(err)
+                })
             }
+          })
+        })
+        .catch((error) => {
+          core.debug(`[Combined Mode] Error: ${error}`)
+          if (!settled) {
+            settled = true
+            fifoPipe.close()
+            reject(error)
           }
-        }, 50)
-      } catch (error) {
-        core.debug(`[FIFO] Error in outer try: ${error}`)
-        if (!settled) {
-          settled = true
-          // Clean up FIFO only if it wasn't successfully unlinked
-          if (!fifoUnlinked) {
-            unlinkSync(fifoPath)
-          }
-          reject(
-            error instanceof Error
-              ? error
-              : new Error(`Failed to create FIFO: ${error}`)
-          )
-        }
-      }
+        })
     }
   })
 }
