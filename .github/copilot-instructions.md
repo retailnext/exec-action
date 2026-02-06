@@ -91,6 +91,39 @@ npm run bundle
   unexpected inputs or situations
 - Use the `@actions/core` package for logging over `console` to ensure
   compatibility with GitHub Actions logging features
+- **Before updating any pull request**, if there are changes to Markdown files
+  between the base branch and current state, run the super-linter Docker image
+  exactly as the CI workflow does:
+
+  ```bash
+  docker run --rm \
+    -e RUN_LOCAL=true \
+    -e USE_FIND_ALGORITHM=true \
+    -e CHECKOV_FILE_NAME=.checkov.yml \
+    -e FILTER_REGEX_EXCLUDE="dist/**/*" \
+    -e LINTER_RULES_PATH=. \
+    -e VALIDATE_ALL_CODEBASE=true \
+    -e VALIDATE_BIOME_FORMAT=false \
+    -e VALIDATE_BIOME_LINT=false \
+    -e VALIDATE_GITHUB_ACTIONS_ZIZMOR=false \
+    -e VALIDATE_JAVASCRIPT_ES=false \
+    -e VALIDATE_JSCPD=false \
+    -e VALIDATE_TYPESCRIPT_ES=false \
+    -e VALIDATE_JSON=false \
+    -v "$(pwd)":/tmp/lint:ro \
+    --workdir=/tmp/lint \
+    ghcr.io/super-linter/super-linter:slim-v8
+  ```
+
+  This command uses all environment variables from the linter workflow
+  (`.github/workflows/linter.yml`) except `GITHUB_TOKEN` (not needed for local
+  runs) and `DEFAULT_BRANCH` (not compatible with `USE_FIND_ALGORITHM=true`).
+  The `RUN_LOCAL=true` flag enables local execution mode. This ensures linting
+  is performed using the same versions and configurations as CI.
+
+  **Important:** Always check this command against
+  `.github/workflows/linter.yml` and update it whenever there are changes to the
+  linter workflow to ensure it stays synchronized with the CI configuration.
 
 ### Versioning
 
