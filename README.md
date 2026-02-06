@@ -10,11 +10,25 @@ A GitHub Action that executes an arbitrary command and captures its output,
 including stdout, stderr, and exit code. The action streams command output in
 real-time and forwards signals to the command.
 
+## ⚠️ BREAKING CHANGE
+
+**Default behavior has changed:** By default, stdout and stderr are now combined
+into a single `combined_output` output. The `stdout` and `stderr` outputs are
+**no longer available by default**.
+
+- **Previous behavior:** Separate `stdout` and `stderr` outputs
+- **New default behavior:** Single `combined_output` containing both streams
+- **To restore old behavior:** Set `separate_outputs: true`
+
+This change ensures that the natural interleaving of stdout and stderr is
+preserved in the output.
+
 ## Features
 
 - Execute any single command
-- Capture command output (combined or separate stdout/stderr) and exit code as
-  action outputs
+- **By default:** Combine stdout and stderr into a single output stream that
+  preserves the natural interleaving of both streams
+- **Optionally:** Capture stdout and stderr separately
 - Stream output in real-time to the workflow logs
 - Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the
   running command
@@ -67,26 +81,39 @@ outcomes.
 
 **Optional** When `false` (default), stdout and stderr are combined into a
 single output stream (`combined_output`). When `true`, stdout and stderr are
-captured separately and available as individual outputs.
+captured separately.
 
-Default is `"false"`, which means output is combined by default.
+**Default:** `"false"` (combined output)
+
+**⚠️ Breaking Change:** This changes the default outputs from `stdout` and
+`stderr` to `combined_output`. Set `separate_outputs: true` to restore the
+previous behavior.
 
 ## Outputs
 
 ### `combined_output`
 
-The combined stdout and stderr of the executed command. Only set when
-`separate_outputs` is `false` (default).
+**Default output.** The combined stdout and stderr of the executed command. Only
+set when `separate_outputs` is `false` (default).
+
+This output preserves the natural interleaving of stdout and stderr as they are
+produced by the command.
 
 ### `stdout`
 
 The standard output of the executed command. Only set when `separate_outputs` is
 `true`.
 
+**Not available by default.** To get this output, you must set
+`separate_outputs: true`.
+
 ### `stderr`
 
 The standard error of the executed command. Only set when `separate_outputs` is
 `true`.
+
+**Not available by default.** To get this output, you must set
+`separate_outputs: true`.
 
 ### `exit_code`
 

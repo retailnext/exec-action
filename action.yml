@@ -31,7 +31,8 @@ outputs:
   combined_output:
     description: >
       The combined stdout and stderr of the command (only set when
-      separate_outputs is false)
+      separate_outputs is false, which is the default). Preserves the natural
+      interleaving of both output streams.
   stdout:
     description: >
       The standard output of the command (only set when separate_outputs is

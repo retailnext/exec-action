@@ -1,5 +1,7 @@
-import { spawn } from 'child_process';
-import { appendFileSync } from 'fs';
+import { spawn, execSync } from 'child_process';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { appendFileSync, createReadStream, unlinkSync, openSync, closeSync } from 'fs';
 
 /**
  * Local implementations of GitHub Actions functions.
@@ -72,6 +74,7 @@ async function run() {
         debug(`Separate outputs: ${separateOutputsInput}`);
         // Parse inputs
         const successExitCodes = parseSuccessExitCodes(successExitCodesInput);
+        // Default to false (combined outputs)
         const separateOutputs = separateOutputsInput.toLowerCase() === 'true' ||
             separateOutputsInput === '1';
         // Execute the command and capture outputs
@@ -156,7 +159,6 @@ function parseSuccessExitCodes(input) {
 async function executeCommand(command, separateOutputs = false) {
     return new Promise((resolve, reject) => {
         // Parse command into executable and arguments
-        // Simple parsing that splits on whitespace while respecting quoted strings
         const args = parseCommand(command);
         if (args.length === 0) {
             reject(new Error('Command cannot be empty'));
@@ -164,16 +166,16 @@ async function executeCommand(command, separateOutputs = false) {
         }
         const executable = args[0];
         const commandArgs = args.slice(1);
-        // Execute command directly without shell
-        const child = spawn(executable, commandArgs, {
-            stdio: ['inherit', 'pipe', 'pipe']
-        });
         let stdout = '';
         let stderr = '';
         let combinedOutput = '';
         let settled = false;
         if (separateOutputs) {
-            // Separate mode: capture stdout and stderr independently
+            // Separate mode: use two different pipes for stdout and stderr
+            const child = spawn(executable, commandArgs, {
+                stdio: ['inherit', 'pipe', 'pipe']
+            });
+            // Capture and stream stdout
             if (child.stdout) {
                 child.stdout.on('data', (data) => {
                     const text = data.toString();
@@ -181,6 +183,7 @@ async function executeCommand(command, separateOutputs = false) {
                     process.stdout.write(text);
                 });
             }
+            // Capture and stream stderr
             if (child.stderr) {
                 child.stderr.on('data', (data) => {
                     const text = data.toString();
@@ -188,73 +191,195 @@ async function executeCommand(command, separateOutputs = false) {
                     process.stderr.write(text);
                 });
             }
+            // Forward signals and handle process lifecycle
+            setupSignalHandlers(child, () => {
+                if (!settled) {
+                    settled = true;
+                    resolve({
+                        stdout,
+                        stderr,
+                        combinedOutput,
+                        exitCode: 0
+                    });
+                }
+            });
+            child.on('error', (error) => {
+                if (!settled) {
+                    settled = true;
+                    reject(error);
+                }
+            });
+            child.on('close', (code) => {
+                if (!settled) {
+                    settled = true;
+                    resolve({
+                        stdout,
+                        stderr,
+                        combinedOutput,
+                        exitCode: code ?? 0
+                    });
+                }
+            });
         }
         else {
-            // Combined mode: merge stdout and stderr into one stream
-            // Both streams are captured and written to stdout only
-            if (child.stdout) {
-                child.stdout.on('data', (data) => {
+            // Combined mode: create a FIFO (named pipe) and pass it to both stdout and stderr
+            const fifoPath = join(tmpdir(), `exec-action-${Date.now()}-${Math.random().toString(36).slice(2)}.fifo`);
+            try {
+                // Create a FIFO (named pipe)
+                execSync(`mkfifo "${fifoPath}"`);
+                // Open the FIFO for reading (non-blocking)
+                const reader = createReadStream(fifoPath, { flags: 'r' });
+                reader.on('data', (data) => {
                     const text = data.toString();
                     combinedOutput += text;
                     process.stdout.write(text);
                 });
-            }
-            if (child.stderr) {
-                child.stderr.on('data', (data) => {
-                    const text = data.toString();
-                    combinedOutput += text;
-                    process.stdout.write(text);
+                reader.on('error', (error) => {
+                    if (!settled) {
+                        settled = true;
+                        reader.close();
+                        try {
+                            unlinkSync(fifoPath);
+                        }
+                        catch (e) {
+                            // Ignore cleanup errors
+                        }
+                        reject(error);
+                    }
                 });
+                // Open the FIFO for writing after a small delay to ensure reader is ready
+                // This prevents the open call from blocking
+                setTimeout(() => {
+                    let writeFd = null;
+                    try {
+                        writeFd = openSync(fifoPath, 'w');
+                        // Spawn with the same fd for both stdout and stderr
+                        const child = spawn(executable, commandArgs, {
+                            stdio: ['inherit', writeFd, writeFd]
+                        });
+                        // Set up signal handlers
+                        setupSignalHandlers(child, () => {
+                            if (!settled) {
+                                settled = true;
+                                if (writeFd !== null)
+                                    closeSync(writeFd);
+                                reader.close();
+                                try {
+                                    unlinkSync(fifoPath);
+                                }
+                                catch (e) {
+                                    // Ignore cleanup errors
+                                }
+                            }
+                        });
+                        child.on('error', (error) => {
+                            if (!settled) {
+                                settled = true;
+                                if (writeFd !== null)
+                                    closeSync(writeFd);
+                                reader.close();
+                                try {
+                                    unlinkSync(fifoPath);
+                                }
+                                catch (e) {
+                                    // Ignore cleanup errors
+                                }
+                                reject(error);
+                            }
+                        });
+                        child.on('close', (code) => {
+                            if (!settled) {
+                                settled = true;
+                                // Close the write fd
+                                if (writeFd !== null)
+                                    closeSync(writeFd);
+                                // Wait a bit for any pending data to be read
+                                setTimeout(() => {
+                                    reader.close();
+                                    try {
+                                        unlinkSync(fifoPath);
+                                    }
+                                    catch (e) {
+                                        // Ignore cleanup errors
+                                    }
+                                    resolve({
+                                        stdout,
+                                        stderr,
+                                        combinedOutput,
+                                        exitCode: code ?? 0
+                                    });
+                                }, 100);
+                            }
+                        });
+                    }
+                    catch (error) {
+                        if (!settled) {
+                            settled = true;
+                            if (writeFd !== null)
+                                closeSync(writeFd);
+                            reader.close();
+                            try {
+                                unlinkSync(fifoPath);
+                            }
+                            catch (e) {
+                                // Ignore cleanup errors
+                            }
+                            reject(error instanceof Error ? error : new Error(String(error)));
+                        }
+                    }
+                }, 50);
+            }
+            catch (error) {
+                if (!settled) {
+                    settled = true;
+                    try {
+                        unlinkSync(fifoPath);
+                    }
+                    catch (e) {
+                        // Ignore cleanup errors
+                    }
+                    reject(error instanceof Error
+                        ? error
+                        : new Error(`Failed to create FIFO: ${error}`));
+                }
             }
         }
-        // Forward signals to the child process
-        const signals = [
-            'SIGINT',
-            'SIGTERM',
-            'SIGQUIT',
-            'SIGHUP',
-            'SIGPIPE',
-            'SIGABRT'
-        ];
-        // Create individual signal handlers for proper cleanup
-        const signalHandlers = new Map();
-        for (const signal of signals) {
-            const handler = () => {
-                debug(`Received ${signal}, forwarding to child process`);
-                child.kill(signal);
-            };
-            signalHandlers.set(signal, handler);
-            process.on(signal, handler);
-        }
-        // Clean up signal handlers when child closes
-        const cleanupSignalHandlers = () => {
-            for (const [signal, handler] of signalHandlers) {
-                process.removeListener(signal, handler);
-            }
-            signalHandlers.clear();
-        };
-        // Handle errors (e.g., command not found)
-        child.on('error', (error) => {
-            if (!settled) {
-                settled = true;
-                cleanupSignalHandlers();
-                reject(error);
-            }
-        });
-        // Handle process exit
-        child.on('close', (code) => {
-            if (!settled) {
-                settled = true;
-                cleanupSignalHandlers();
-                resolve({
-                    stdout,
-                    stderr,
-                    combinedOutput,
-                    exitCode: code ?? 0
-                });
-            }
-        });
     });
+}
+/**
+ * Set up signal forwarding for a child process.
+ *
+ * @param child The child process to forward signals to.
+ * @param cleanup Cleanup function to call when removing handlers.
+ */
+function setupSignalHandlers(child, cleanup) {
+    const signals = [
+        'SIGINT',
+        'SIGTERM',
+        'SIGQUIT',
+        'SIGHUP',
+        'SIGPIPE',
+        'SIGABRT'
+    ];
+    const signalHandlers = new Map();
+    for (const signal of signals) {
+        const handler = () => {
+            debug(`Received ${signal}, forwarding to child process`);
+            child.kill(signal);
+        };
+        signalHandlers.set(signal, handler);
+        process.on(signal, handler);
+    }
+    // Clean up signal handlers when child closes
+    const cleanupSignalHandlers = () => {
+        for (const [signal, handler] of signalHandlers) {
+            process.removeListener(signal, handler);
+        }
+        signalHandlers.clear();
+        cleanup();
+    };
+    child.on('close', cleanupSignalHandlers);
+    child.on('error', cleanupSignalHandlers);
 }
 /**
  * Parse a command string into an array of arguments.
