@@ -144,6 +144,34 @@ version in the project's `package.json` is updated to reflect the changes made
 in the codebase. The version should follow
 [Semantic Versioning](https://semver.org/) principles.
 
+### Node.js Version Consistency
+
+This action runs in the GitHub Actions runtime specified in `action.yml` (the
+`runs.using` field). All Node.js version specifications and constraints
+throughout the repository must be kept in sync with this runtime version.
+
+**Source of Truth**: The `runs.using` field in `action.yml` (e.g., `nodeXX`) is
+the ultimate source of truth for the Node.js major version.
+
+**Files that must stay aligned**:
+
+- `.node-version` - Should specify the major version to use the latest LTS
+- `.devcontainer/devcontainer.json` - The base image must use the same major
+  version
+- `package.json` - The `engines.node` field should have a minimum constraint
+  matching the major version but no maximum constraint
+- `@types/node` - Must use the same major version as the runtime
+- `.github/dependabot.yml` - Must be configured to ignore major version upgrades
+  of `@types/node` beyond the current runtime version
+
+**Important**: Do not specify exact versions or maximum version constraints for
+the Node.js engine or `@types/node` in `package.json`, as we don't control the
+exact minor/patch version used by the GitHub Actions runtime. We want to use the
+latest/default version of the major version.
+
+When making changes to Node.js version specifications, ensure ALL files are
+updated together to maintain consistency across the repository.
+
 ## Pull Request Guidelines
 
 When creating a pull request (PR), please ensure that:
