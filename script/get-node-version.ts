@@ -31,7 +31,9 @@ export function getNodeMajorVersion(): number {
 }
 
 // If run directly as a script, print the version
-const isMainModule = import.meta.url === new URL(process.argv[1], 'file:').href
+const isMainModule =
+  fileURLToPath(import.meta.url) === process.argv[1] ||
+  fileURLToPath(import.meta.url) === resolve(process.argv[1])
 
 if (isMainModule) {
   try {
