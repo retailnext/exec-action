@@ -80,9 +80,9 @@ badge is out of date, making the PR unmergeable.
 After making code changes and running tests:
 
 1. Run `npm run coverage` to update the coverage badge
-2. Verify the badge is correct by running
+1. Verify the badge is correct by running
    `npx tsx script/check-coverage-badge.ts`
-3. Commit the updated badge along with your code changes
+1. Commit the updated badge along with your code changes
 
 ### Checking Coverage Badge Accuracy
 
