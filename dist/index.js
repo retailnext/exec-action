@@ -226,8 +226,14 @@ async function executeCommand(command) {
     const { stdoutPath, stderrPath, stdoutFd, stderrFd } = createOutputFiles();
     // Create write streams for the output files
     // autoClose: true ensures the fd is closed when the stream ends
-    const stdoutFileStream = createWriteStream('', { fd: stdoutFd, autoClose: true });
-    const stderrFileStream = createWriteStream('', { fd: stderrFd, autoClose: true });
+    const stdoutFileStream = createWriteStream('', {
+        fd: stdoutFd,
+        autoClose: true
+    });
+    const stderrFileStream = createWriteStream('', {
+        fd: stderrFd,
+        autoClose: true
+    });
     return new Promise((resolve, reject) => {
         // Execute command directly without shell
         const child = spawn(executable, commandArgs, {
