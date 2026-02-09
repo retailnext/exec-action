@@ -6,6 +6,7 @@
  * this test, so that the actual module is not imported.
  */
 import { jest } from '@jest/globals'
+import { readFile } from 'fs/promises'
 import * as core from '../__fixtures__/core.js'
 
 // Mocks should be declared before the module being tested is imported.
@@ -31,12 +32,15 @@ describe('main.ts', () => {
 
       await run()
 
-      // Verify outputs were set
+      // Verify outputs were set with file paths
       expect(core.setOutput).toHaveBeenCalledWith(
-        'stdout',
-        expect.stringContaining('Hello World')
+        'stdout_file',
+        expect.stringMatching(/exec-.*\.stdout$/)
       )
-      expect(core.setOutput).toHaveBeenCalledWith('stderr', expect.any(String))
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'stderr_file',
+        expect.stringMatching(/exec-.*\.stderr$/)
+      )
       expect(core.setOutput).toHaveBeenCalledWith('exit_code', '0')
 
       // Verify the action did not fail
@@ -52,9 +56,15 @@ describe('main.ts', () => {
 
       await run()
 
-      // Verify outputs were set
-      expect(core.setOutput).toHaveBeenCalledWith('stdout', expect.any(String))
-      expect(core.setOutput).toHaveBeenCalledWith('stderr', expect.any(String))
+      // Verify outputs were set with file paths
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'stdout_file',
+        expect.stringMatching(/exec-.*\.stdout$/)
+      )
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'stderr_file',
+        expect.stringMatching(/exec-.*\.stderr$/)
+      )
       expect(core.setOutput).toHaveBeenCalledWith('exit_code', '1')
 
       // Verify that the action was marked as failed
@@ -72,9 +82,15 @@ describe('main.ts', () => {
 
       await run()
 
-      // Verify outputs were set
-      expect(core.setOutput).toHaveBeenCalledWith('stdout', expect.any(String))
-      expect(core.setOutput).toHaveBeenCalledWith('stderr', expect.any(String))
+      // Verify outputs were set with file paths
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'stdout_file',
+        expect.stringMatching(/exec-.*\.stdout$/)
+      )
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'stderr_file',
+        expect.stringMatching(/exec-.*\.stderr$/)
+      )
       expect(core.setOutput).toHaveBeenCalledWith('exit_code', '1')
 
       // Verify the action did not fail
@@ -223,19 +239,28 @@ describe('main.ts', () => {
   })
 
   describe('executeCommand', () => {
-    it('Captures stdout from a command', async () => {
+    it('Captures stdout from a command to file', async () => {
       const result = await executeCommand('echo "test output"')
 
-      expect(result.stdout).toContain('test output')
+      expect(result.stdoutFile).toMatch(/exec-.*\.stdout$/)
+      expect(result.stderrFile).toMatch(/exec-.*\.stderr$/)
       expect(result.exitCode).toBe(0)
+
+      // Verify file contents
+      const stdoutContent = await readFile(result.stdoutFile, 'utf-8')
+      expect(stdoutContent).toContain('test output')
     })
 
-    it('Captures stderr from a command', async () => {
+    it('Captures stderr from a command to file', async () => {
       // Use sh to redirect to stderr since we can't use shell operators directly
       const result = await executeCommand('sh -c "echo error output >&2"')
 
-      expect(result.stderr).toContain('error output')
+      expect(result.stderrFile).toMatch(/exec-.*\.stderr$/)
       expect(result.exitCode).toBe(0)
+
+      // Verify file contents
+      const stderrContent = await readFile(result.stderrFile, 'utf-8')
+      expect(stderrContent).toContain('error output')
     })
 
     it('Captures exit code from a failed command', async () => {
@@ -249,17 +274,26 @@ describe('main.ts', () => {
       // Use sh to run multiple echo commands
       const result = await executeCommand('sh -c "echo line1 && echo line2"')
 
-      expect(result.stdout).toContain('line1')
-      expect(result.stdout).toContain('line2')
+      expect(result.stdoutFile).toMatch(/exec-.*\.stdout$/)
+      expect(result.stderrFile).toMatch(/exec-.*\.stderr$/)
       expect(result.exitCode).toBe(0)
+
+      // Verify file contents
+      const stdoutContent = await readFile(result.stdoutFile, 'utf-8')
+      expect(stdoutContent).toContain('line1')
+      expect(stdoutContent).toContain('line2')
     })
 
     it('Works with commands in PATH', async () => {
       // Test that we can find executables in PATH without full path
-      const result = await executeCommand('ls -la')
+      const result = await executeCommand('echo testing')
 
       expect(result.exitCode).toBe(0)
-      expect(result.stdout.length).toBeGreaterThan(0)
+      expect(result.stdoutFile).toMatch(/exec-.*\.stdout$/)
+
+      // Verify file has content
+      const stdoutContent = await readFile(result.stdoutFile, 'utf-8')
+      expect(stdoutContent).toContain('testing')
     })
 
     it('Works with npm commands', async () => {
@@ -267,7 +301,29 @@ describe('main.ts', () => {
       const result = await executeCommand('npm --version')
 
       expect(result.exitCode).toBe(0)
-      expect(result.stdout.length).toBeGreaterThan(0)
+      expect(result.stdoutFile).toMatch(/exec-.*\.stdout$/)
+
+      // Verify file has content
+      const stdoutContent = await readFile(result.stdoutFile, 'utf-8')
+      expect(stdoutContent.length).toBeGreaterThan(0)
+    })
+
+    it('Captures both stdout and stderr to separate files', async () => {
+      const result = await executeCommand(
+        'sh -c "echo stdout message && echo stderr message >&2"'
+      )
+
+      expect(result.exitCode).toBe(0)
+
+      // Verify stdout file contents
+      const stdoutContent = await readFile(result.stdoutFile, 'utf-8')
+      expect(stdoutContent).toContain('stdout message')
+      expect(stdoutContent).not.toContain('stderr message')
+
+      // Verify stderr file contents
+      const stderrContent = await readFile(result.stderrFile, 'utf-8')
+      expect(stderrContent).toContain('stderr message')
+      expect(stderrContent).not.toContain('stdout message')
     })
   })
 })

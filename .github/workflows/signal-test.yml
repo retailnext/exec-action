@@ -37,10 +37,12 @@ jobs:
         if: always()
         run: |
           echo "Exit Code: ${{ steps.signal-test.outputs.exit_code }}"
+          echo "Stdout File: ${{ steps.signal-test.outputs.stdout_file }}"
+          echo "Stderr File: ${{ steps.signal-test.outputs.stderr_file }}"
           echo "=== Standard Output ==="
-          echo "${{ steps.signal-test.outputs.stdout }}"
+          cat "${{ steps.signal-test.outputs.stdout_file }}"
           echo "=== Standard Error ==="
-          echo "${{ steps.signal-test.outputs.stderr }}"
+          cat "${{ steps.signal-test.outputs.stderr_file }}"
           echo ""
           echo "Checking if outputs were populated..."
           if [ -n "${{ steps.signal-test.outputs.exit_code }}" ]; then
@@ -51,16 +53,16 @@ jobs:
             exit 1
           fi
 
-          if [ -n "${{ steps.signal-test.outputs.stdout }}" ]; then
-            echo "✓ Stdout output is populated"
+          if [ -s "${{ steps.signal-test.outputs.stdout_file }}" ]; then
+            echo "✓ Stdout file has content"
           else
-            echo "✗ Stdout output is empty"
+            echo "✗ Stdout file is empty"
             exit 1
           fi
 
           echo ""
           echo "Checking if signal was received..."
-          if echo "${{ steps.signal-test.outputs.stdout }}" \
+          if cat "${{ steps.signal-test.outputs.stdout_file }}" \
             | grep -q "Received"; then
             echo "✓ Signal was properly forwarded to child process"
             echo "✓ Test PASSED: Timeout triggered signal forwarding"
@@ -94,8 +96,8 @@ jobs:
         run: |
           echo "Exit Code: ${{ steps.timeout-test.outputs.exit_code }}"
           echo "=== Output ==="
-          echo "${{ steps.timeout-test.outputs.stdout }}"
-          if echo "${{ steps.timeout-test.outputs.stdout }}" \
+          cat "${{ steps.timeout-test.outputs.stdout_file }}"
+          if cat "${{ steps.timeout-test.outputs.stdout_file }}" \
             | grep -q "shutting down gracefully"; then
             echo "✓ Graceful shutdown worked correctly"
           else
@@ -124,8 +126,8 @@ jobs:
       - name: Verify SIGHUP Handling
         run: |
           echo "SIGHUP Test Output:"
-          echo "${{ steps.test-sighup.outputs.stdout }}"
-          if echo "${{ steps.test-sighup.outputs.stdout }}" \
+          cat "${{ steps.test-sighup.outputs.stdout_file }}"
+          if cat "${{ steps.test-sighup.outputs.stdout_file }}" \
             | grep -q "Received SIGHUP"; then
             echo "✓ SIGHUP was handled correctly"
           else
@@ -144,8 +146,8 @@ jobs:
       - name: Verify SIGINT Handling
         run: |
           echo "SIGINT Test Output:"
-          echo "${{ steps.test-sigint.outputs.stdout }}"
-          if echo "${{ steps.test-sigint.outputs.stdout }}" \
+          cat "${{ steps.test-sigint.outputs.stdout_file }}"
+          if cat "${{ steps.test-sigint.outputs.stdout_file }}" \
             | grep -q "Received SIGINT"; then
             echo "✓ SIGINT was handled correctly"
           else

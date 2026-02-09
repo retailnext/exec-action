@@ -6,14 +6,23 @@
 ![CodeQL](https://github.com/actions/typescript-action/actions/workflows/codeql-analysis.yml/badge.svg)
 ![Coverage](./badges/coverage.svg)
 
-A GitHub Action that executes an arbitrary command and captures its output,
-including stdout, stderr, and exit code. The action streams command output in
-real-time and forwards signals to the command.
+A GitHub Action that executes an arbitrary command and captures its output to
+files, including stdout, stderr, and exit code. The action streams command
+output in real-time and forwards signals to the command.
+
+## Breaking Changes
+
+**BREAKING CHANGE**: This action now writes stdout and stderr to files instead
+of GitHub Action outputs. This change addresses issues with passing large
+outputs to subsequent steps (which could cause "Argument list too long" errors).
+The outputs `stdout` and `stderr` have been replaced with `stdout_file` and
+`stderr_file`, which contain paths to the files where the output is stored.
 
 ## Features
 
 - Execute any single command
-- Capture standard output, standard error, and exit code as action outputs
+- Capture standard output and standard error to temporary files
+- Output file paths available as action outputs
 - Stream output in real-time to the workflow logs
 - Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the
   running command
@@ -40,8 +49,12 @@ steps:
   - name: Print Output
     run: |
       echo "Exit Code: ${{ steps.exec.outputs.exit_code }}"
-      echo "Stdout: ${{ steps.exec.outputs.stdout }}"
-      echo "Stderr: ${{ steps.exec.outputs.stderr }}"
+      echo "Stdout File: ${{ steps.exec.outputs.stdout_file }}"
+      echo "Stderr File: ${{ steps.exec.outputs.stderr_file }}"
+      echo "Stdout Content:"
+      cat "${{ steps.exec.outputs.stdout_file }}"
+      echo "Stderr Content:"
+      cat "${{ steps.exec.outputs.stderr_file }}"
 ```
 
 ## Inputs
@@ -65,13 +78,16 @@ outcomes.
 
 ## Outputs
 
-### `stdout`
+### `stdout_file`
 
-The standard output of the executed command.
+Path to the file containing the standard output of the executed command. The
+file is located in the directory specified by the `RUNNER_TEMP` environment
+variable.
 
-### `stderr`
+### `stderr_file`
 
-The standard error of the executed command.
+Path to the file containing the standard error of the executed command. The file
+is located in the directory specified by the `RUNNER_TEMP` environment variable.
 
 ### `exit_code`
 
@@ -107,7 +123,8 @@ The exit code of the executed command (as a string).
   if: steps.run.outputs.exit_code != '0'
   run: |
     echo "Command failed with exit code ${{ steps.run.outputs.exit_code }}"
-    echo "Error output: ${{ steps.run.outputs.stderr }}"
+    echo "Error output:"
+    cat "${{ steps.run.outputs.stderr_file }}"
 ```
 
 ### Accept multiple exit codes as success
