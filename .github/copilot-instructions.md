@@ -151,6 +151,7 @@ docker run --rm \
   -e USE_FIND_ALGORITHM=true \
   -e CHECKOV_FILE_NAME=.checkov.yml \
   -e FILTER_REGEX_EXCLUDE="dist/**/*" \
+  -e IGNORE_GITIGNORED_FILES=true \
   -e LINTER_RULES_PATH=. \
   -e VALIDATE_ALL_CODEBASE=true \
   -e VALIDATE_BIOME_FORMAT=false \
