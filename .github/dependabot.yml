@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       actions-minor:
         update-types:
@@ -13,7 +13,7 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     ignore:
       # Ignore @types/node major version upgrades beyond current runtime
       # The major version must stay aligned with the node runtime in action.yml
