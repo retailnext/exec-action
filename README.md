@@ -24,6 +24,7 @@ The outputs `stdout` and `stderr` have been replaced with `stdout_file` and
 - Capture standard output and standard error to temporary files
 - Output file paths available as action outputs
 - Stream output in real-time to the workflow logs
+- Optionally hide outputs from the workflow log to protect sensitive data
 - Forward signals (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGABRT) to the
   running command
 - Commands are executed directly without a shell (no shell operators like `|`,
@@ -75,6 +76,17 @@ This is useful when your command may exit with non-zero codes that should still
 be considered successful. For example, some linters return specific exit codes
 for warnings vs errors, or you may want to accept multiple exit codes as valid
 outcomes.
+
+### `hide_outputs`
+
+**Optional** When set to `"true"`, the stdout and stderr from the command are
+only written to the respective output files and are not written to the
+stdout/stderr of the action itself. Default is `"false"`.
+
+This is useful for commands that emit sensitive data (e.g., secrets, tokens) to
+their output. The outputs are hidden from the GitHub Actions log but remain
+available to subsequent workflow steps via the `stdout_file` and `stderr_file`
+output paths.
 
 ## Outputs
 
@@ -158,4 +170,20 @@ The exit code of the executed command (as a string).
     command: 'some-tool --check'
     # Accept 0, any code from 10-15, and 20 as success
     success_exit_codes: '0,10-15,20'
+```
+
+### Hide sensitive outputs from the log
+
+```yaml
+- name: Fetch Secret Data
+  id: fetch
+  uses: retailnext/exec-action@main
+  with:
+    command: 'my-tool --output-secret'
+    hide_outputs: 'true'
+
+- name: Process Secret Data
+  run: |
+    # The output is hidden from the log but available via the file path
+    process-data < "${{ steps.fetch.outputs.stdout_file }}"
 ```

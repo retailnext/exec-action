@@ -110,6 +110,45 @@ describe('main.ts', () => {
       expect(core.setFailed).not.toHaveBeenCalled()
     })
 
+    it('Hides outputs from process streams when hide_outputs is true', async () => {
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return 'echo "Hello World"'
+        if (name === 'success_exit_codes') return '0'
+        if (name === 'hide_outputs') return 'true'
+        return ''
+      })
+
+      await run()
+
+      // Verify outputs were still set with file paths
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'stdout_file',
+        expect.stringMatching(/exec-.*\.stdout$/)
+      )
+      expect(core.setOutput).toHaveBeenCalledWith(
+        'stderr_file',
+        expect.stringMatching(/exec-.*\.stderr$/)
+      )
+      expect(core.setOutput).toHaveBeenCalledWith('exit_code', '0')
+
+      // Verify the action did not fail
+      expect(core.setFailed).not.toHaveBeenCalled()
+    })
+
+    it('Does not hide outputs when hide_outputs is false', async () => {
+      core.getInput.mockImplementation((name: string) => {
+        if (name === 'command') return 'echo "Hello World"'
+        if (name === 'success_exit_codes') return '0'
+        if (name === 'hide_outputs') return 'false'
+        return ''
+      })
+
+      await run()
+
+      // Verify the action did not fail
+      expect(core.setFailed).not.toHaveBeenCalled()
+    })
+
     it('Handles execution errors', async () => {
       // Use parseCommand with invalid input to trigger an error
       core.getInput.mockImplementation((name: string) => {
@@ -306,6 +345,23 @@ describe('main.ts', () => {
       // Verify file has content
       const stdoutContent = await readFile(result.stdoutFile, 'utf-8')
       expect(stdoutContent.length).toBeGreaterThan(0)
+    })
+
+    it('Does not forward outputs to process streams when hideOutputs is true', async () => {
+      const result = await executeCommand(
+        'sh -c "echo stdout message && echo stderr message >&2"',
+        { hideOutputs: true }
+      )
+
+      expect(result.exitCode).toBe(0)
+
+      // Verify stdout file still has the output content
+      const stdoutContent = await readFile(result.stdoutFile, 'utf-8')
+      expect(stdoutContent).toContain('stdout message')
+
+      // Verify stderr file still has the output content
+      const stderrContent = await readFile(result.stderrFile, 'utf-8')
+      expect(stderrContent).toContain('stderr message')
     })
 
     it('Captures both stdout and stderr to separate files', async () => {
