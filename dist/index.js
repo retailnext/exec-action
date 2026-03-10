@@ -69,12 +69,14 @@ async function run() {
     try {
         const command = getInput('command', { required: true });
         const successExitCodesInput = getInput('success_exit_codes');
+        const hideOutputs = getInput('hide_outputs').toLowerCase() === 'true';
         debug(`Executing command: ${command}`);
         debug(`Success exit codes: ${successExitCodesInput}`);
+        debug(`Hide outputs: ${hideOutputs}`);
         // Parse success exit codes
         const successExitCodes = parseSuccessExitCodes(successExitCodesInput);
         // Execute the command and capture outputs
-        const result = await executeCommand(command);
+        const result = await executeCommand(command, { hideOutputs });
         // Set outputs for other workflow steps to use
         setOutput('stdout_file', result.stdoutFile);
         setOutput('stderr_file', result.stderrFile);
@@ -211,9 +213,13 @@ function setupSignalHandlers(child) {
  * Execute a command and capture its output to files.
  *
  * @param command The command to execute.
+ * @param options Optional execution options.
+ * @param options.hideOutputs When true, stdout and stderr are only written to
+ *   files and are not forwarded to process.stdout/process.stderr.
  * @returns A promise that resolves with file paths and exit code.
  */
-async function executeCommand(command) {
+async function executeCommand(command, options = {}) {
+    const { hideOutputs = false } = options;
     // Parse command into executable and arguments
     // Simple parsing that splits on whitespace while respecting quoted strings
     const args = parseCommand(command);
@@ -269,20 +275,24 @@ async function executeCommand(command) {
             stderrStreamFinished = true;
             checkIfComplete();
         });
-        // Pipe stdout to both file and process.stdout
+        // Pipe stdout to file, and optionally to process.stdout
         // By default, stream.end() is called on the destination when source emits 'end'
         if (child.stdout) {
             child.stdout.pipe(stdoutFileStream);
-            child.stdout.pipe(process.stdout);
+            if (!hideOutputs) {
+                child.stdout.pipe(process.stdout);
+            }
         }
         else {
             // No stdout, manually end the stream
             stdoutFileStream.end();
         }
-        // Pipe stderr to both file and process.stderr
+        // Pipe stderr to file, and optionally to process.stderr
         if (child.stderr) {
             child.stderr.pipe(stderrFileStream);
-            child.stderr.pipe(process.stderr);
+            if (!hideOutputs) {
+                child.stderr.pipe(process.stderr);
+            }
         }
         else {
             // No stderr, manually end the stream

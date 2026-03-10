@@ -15,15 +15,18 @@ export async function run(): Promise<void> {
   try {
     const command: string = core.getInput('command', { required: true })
     const successExitCodesInput: string = core.getInput('success_exit_codes')
+    const hideOutputs: boolean =
+      core.getInput('hide_outputs').toLowerCase() === 'true'
 
     core.debug(`Executing command: ${command}`)
     core.debug(`Success exit codes: ${successExitCodesInput}`)
+    core.debug(`Hide outputs: ${hideOutputs}`)
 
     // Parse success exit codes
     const successExitCodes = parseSuccessExitCodes(successExitCodesInput)
 
     // Execute the command and capture outputs
-    const result = await executeCommand(command)
+    const result = await executeCommand(command, { hideOutputs })
 
     // Set outputs for other workflow steps to use
     core.setOutput('stdout_file', result.stdoutFile)
@@ -204,13 +207,21 @@ function setupSignalHandlers(child: ReturnType<typeof spawn>): () => void {
  * Execute a command and capture its output to files.
  *
  * @param command The command to execute.
+ * @param options Optional execution options.
+ * @param options.hideOutputs When true, stdout and stderr are only written to
+ *   files and are not forwarded to process.stdout/process.stderr.
  * @returns A promise that resolves with file paths and exit code.
  */
-export async function executeCommand(command: string): Promise<{
+export async function executeCommand(
+  command: string,
+  options: { hideOutputs?: boolean } = {}
+): Promise<{
   stdoutFile: string
   stderrFile: string
   exitCode: number
 }> {
+  const { hideOutputs = false } = options
+
   // Parse command into executable and arguments
   // Simple parsing that splits on whitespace while respecting quoted strings
   const args = parseCommand(command)
@@ -278,20 +289,24 @@ export async function executeCommand(command: string): Promise<{
       checkIfComplete()
     })
 
-    // Pipe stdout to both file and process.stdout
+    // Pipe stdout to file, and optionally to process.stdout
     // By default, stream.end() is called on the destination when source emits 'end'
     if (child.stdout) {
       child.stdout.pipe(stdoutFileStream)
-      child.stdout.pipe(process.stdout)
+      if (!hideOutputs) {
+        child.stdout.pipe(process.stdout)
+      }
     } else {
       // No stdout, manually end the stream
       stdoutFileStream.end()
     }
 
-    // Pipe stderr to both file and process.stderr
+    // Pipe stderr to file, and optionally to process.stderr
     if (child.stderr) {
       child.stderr.pipe(stderrFileStream)
-      child.stderr.pipe(process.stderr)
+      if (!hideOutputs) {
+        child.stderr.pipe(process.stderr)
+      }
     } else {
       // No stderr, manually end the stream
       stderrFileStream.end()
