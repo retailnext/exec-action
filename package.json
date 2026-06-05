@@ -65,6 +65,7 @@
   },
   "overrides": {
     "@actions/artifact": "^6.2.0",
-    "@actions/github": "^9.0.0"
+    "@actions/github": "^9.0.0",
+    "fast-xml-parser": "^5.8.0"
   }
 }
