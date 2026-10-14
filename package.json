@@ -66,6 +66,12 @@
   "overrides": {
     "@actions/artifact": "^6.2.1",
     "@actions/github": "^9.1.1",
-    "fast-xml-parser": "^5.10.1"
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "^4.3.2"
+    },
+    "fast-xml-parser": "^5.10.1",
+    "ts-jest-resolver": {
+      "jest-resolve": "^30.5.1"
+    }
   }
 }
