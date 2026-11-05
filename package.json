@@ -70,6 +70,7 @@
       "js-yaml": "^4.3.2"
     },
     "fast-xml-parser": "^5.10.1",
+    "minimatch": "^11.0.1",
     "ts-jest-resolver": {
       "jest-resolve": "^30.5.1"
     }
